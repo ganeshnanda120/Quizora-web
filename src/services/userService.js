@@ -3,6 +3,76 @@ import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { db, storage } from '../firebase';
 
 /**
+ * Checks if a profile object is complete and valid.
+ * Supports various naming conventions (web, mobile, flutter, firestore).
+ * @param {object|null} data 
+ * @returns {boolean}
+ */
+export const checkIsProfileComplete = (data) => {
+  if (!data || typeof data !== 'object') return false;
+
+  // 1. Check explicit completion flags
+  if (
+    data.profileCompleted === true ||
+    data.isProfileCompleted === true ||
+    data.profile_completed === true ||
+    data.is_profile_completed === true ||
+    data.isCompleted === true ||
+    data.completed === true ||
+    data.profileCompleted === 'true'
+  ) {
+    return true;
+  }
+
+  // 2. Check if required fields exist and are non-empty
+  const name = (data.fullName || data.name || data.full_name || data.displayName || '').trim();
+  const gender = (data.gender || '').trim();
+  const dob = (data.dateOfBirth || data.dob || data.date_of_birth || data.birthDate || '').trim();
+
+  // If user has a name and either gender or date of birth filled, profile is considered complete
+  if (name.length > 0 && (gender.length > 0 || dob.length > 0)) {
+    return true;
+  }
+
+  return false;
+};
+
+/**
+ * Normalizes user profile data across various schema formats
+ * @param {string} uid 
+ * @param {object} data 
+ * @returns {object}
+ */
+export const normalizeUserProfile = (uid, data = {}) => {
+  if (!data) return null;
+
+  const isComplete = checkIsProfileComplete(data);
+  const name = data.fullName || data.name || data.full_name || data.displayName || '';
+  const email = data.email || '';
+  const gender = data.gender || 'Prefer not to say';
+  const dob = data.dateOfBirth || data.dob || data.date_of_birth || data.birthDate || '';
+  const photo = data.photoURL || data.profileImageUrl || data.photo_url || data.avatar || data.avatarUrl || '';
+
+  return {
+    ...data,
+    uid: data.uid || uid,
+    fullName: name,
+    name: name,
+    email: email,
+    gender: gender,
+    dateOfBirth: dob,
+    dob: dob,
+    photoURL: photo,
+    profileImageUrl: photo,
+    profileCompleted: isComplete,
+    isProfileCompleted: isComplete,
+    profile_completed: isComplete,
+    createdAt: data.createdAt || data.created_at || new Date().toISOString(),
+    updatedAt: data.updatedAt || data.updated_at || new Date().toISOString()
+  };
+};
+
+/**
  * Client-side image compressor that resizes images to max 600px dimension and converts to JPEG blob
  * @param {File} file 
  * @param {number} maxDimension 
@@ -80,22 +150,50 @@ export const getUserProfile = async (uid) => {
   let localData = null;
   try {
     const raw = localStorage.getItem(localKey);
-    if (raw) localData = JSON.parse(raw);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      localData = normalizeUserProfile(uid, parsed);
+    }
   } catch {
     // Ignore JSON parse error
   }
 
   try {
+    // 1. Check 'users' collection (standard Firestore path)
     const userDocRef = doc(db, 'users', uid);
     const docSnap = await getDoc(userDocRef);
     if (docSnap.exists()) {
-      const remoteData = docSnap.data();
-      localStorage.setItem(localKey, JSON.stringify(remoteData));
+      const remoteData = normalizeUserProfile(uid, docSnap.data());
+      try {
+        localStorage.setItem(localKey, JSON.stringify(remoteData));
+      } catch {
+        // Ignore quota error
+      }
       return { exists: true, data: remoteData };
     }
+
+    // 2. Fallback check for capitalized 'Users' collection if applicable
+    try {
+      const altDocRef = doc(db, 'Users', uid);
+      const altSnap = await getDoc(altDocRef);
+      if (altSnap.exists()) {
+        const remoteData = normalizeUserProfile(uid, altSnap.data());
+        try {
+          localStorage.setItem(localKey, JSON.stringify(remoteData));
+        } catch {
+          // Ignore quota error
+        }
+        return { exists: true, data: remoteData };
+      }
+    } catch {
+      // Ignore
+    }
+
+    // 3. Fallback to local cache if Firestore returned empty but local profile exists
     if (localData) {
       return { exists: true, data: localData };
     }
+
     return { exists: false, data: null };
   } catch (error) {
     console.warn("Firestore getUserProfile notice:", error.message);
@@ -143,7 +241,7 @@ export const uploadProfileImage = async (uid, file) => {
 export const saveUserProfile = async (uid, profileData, imageFile = null, fallbackPhotoURL = '') => {
   if (!uid) throw new Error("User ID is required");
 
-  let photoURL = profileData.photoURL || fallbackPhotoURL || '';
+  let photoURL = profileData.photoURL || profileData.profileImageUrl || fallbackPhotoURL || '';
 
   // Only upload to Firebase Storage if an explicit image file was selected by the user
   if (imageFile) {
@@ -155,22 +253,27 @@ export const saveUserProfile = async (uid, profileData, imageFile = null, fallba
     }
   }
 
-  const cleanFullName = profileData.fullName ? profileData.fullName.trim() : '';
+  const cleanFullName = (profileData.fullName || profileData.name || '').trim();
   const now = new Date().toISOString();
 
   const userPayload = {
     uid,
     fullName: cleanFullName,
+    name: cleanFullName,
     email: profileData.email || '',
     gender: profileData.gender || 'Prefer not to say',
-    dateOfBirth: profileData.dateOfBirth || '',
+    dateOfBirth: profileData.dateOfBirth || profileData.dob || '',
+    dob: profileData.dateOfBirth || profileData.dob || '',
     photoURL: photoURL || '',
+    profileImageUrl: photoURL || '',
     profileCompleted: true,
+    isProfileCompleted: true,
+    profile_completed: true,
     updatedAt: now
   };
 
-  if (profileData.createdAt) {
-    userPayload.createdAt = profileData.createdAt;
+  if (profileData.createdAt || profileData.created_at) {
+    userPayload.createdAt = profileData.createdAt || profileData.created_at;
   } else {
     userPayload.createdAt = now;
   }
@@ -182,7 +285,7 @@ export const saveUserProfile = async (uid, profileData, imageFile = null, fallba
     // Ignore quota errors
   }
 
-  // Write to Firestore with permission resilience
+  // Write to Firestore with merge to protect existing user fields
   try {
     const userDocRef = doc(db, 'users', uid);
     await setDoc(userDocRef, userPayload, { merge: true });
@@ -190,5 +293,5 @@ export const saveUserProfile = async (uid, profileData, imageFile = null, fallba
     console.warn("Firestore save permission notice (using local profile cache):", error.message);
   }
 
-  return userPayload;
+  return normalizeUserProfile(uid, userPayload);
 };

@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { onAuthStateChanged } from 'firebase/auth';
 import { auth } from './firebase';
-import { getUserProfile } from './services/userService';
+import { getUserProfile, checkIsProfileComplete } from './services/userService';
 import Login from './components/Auth/Login';
 import Register from './components/Auth/Register';
 import VerifyEmail from './components/Auth/VerifyEmail';
@@ -38,35 +38,52 @@ function App() {
     setCurrentPath(target);
   };
 
-  // Helper to fetch user profile from Firestore
+  // Helper to fetch user profile from Firestore with safety checks
   const fetchProfile = async (uid) => {
-    setProfileLoading(true);
     try {
       const res = await getUserProfile(uid);
       setProfileData(res.data);
+      return res.data;
     } catch (err) {
       console.error("Error fetching user profile:", err);
       setProfileData(null);
-    } finally {
-      setProfileLoading(false);
+      return null;
     }
   };
 
-  // Single Firebase auth state listener
+  // Firebase auth state listener - safely batches auth and profile checking
   useEffect(() => {
+    let isMounted = true;
+
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
+      if (!isMounted) return;
+
       if (currentUser) {
         setUser(currentUser);
-        await fetchProfile(currentUser.uid);
+        setProfileLoading(true);
+        try {
+          const profile = await fetchProfile(currentUser.uid);
+          if (isMounted) {
+            setProfileData(profile);
+          }
+        } finally {
+          if (isMounted) {
+            setProfileLoading(false);
+            setAuthLoading(false);
+          }
+        }
       } else {
         setUser(null);
         setProfileData(null);
         setProfileLoading(false);
+        setAuthLoading(false);
       }
-      setAuthLoading(false);
     });
 
-    return () => unsubscribe();
+    return () => {
+      isMounted = false;
+      unsubscribe();
+    };
   }, []);
 
   // Helper to determine if user is verified
@@ -82,17 +99,25 @@ function App() {
     return isGoogleUser;
   };
 
+  // Helper to check if the user profile is completed
+  const isProfileComplete = (profile) => {
+    return checkIsProfileComplete(profile);
+  };
+
   // Handle automatic redirects based on auth state, email verification & profile completion
   useEffect(() => {
+    // Hold routing until both auth state and profile data have finished loading
     if (authLoading || profileLoading) return;
 
     let target = null;
     if (user) {
       if (isUserVerified(user)) {
-        if (!profileData || !profileData.profileCompleted) {
+        if (!isProfileComplete(profileData)) {
           if (currentPath !== '/complete-profile') target = '/complete-profile';
         } else {
-          if (currentPath !== '/dashboard') target = '/dashboard';
+          if (['/login', '/register', '/verify-email', '/complete-profile', '/'].includes(currentPath)) {
+            target = '/dashboard';
+          }
         }
       } else {
         if (currentPath !== '/verify-email') target = '/verify-email';
@@ -112,7 +137,12 @@ function App() {
   // Callback when user completes email verification
   const handleUserVerified = async (updatedUser) => {
     setUser(updatedUser);
-    await fetchProfile(updatedUser.uid);
+    setProfileLoading(true);
+    try {
+      await fetchProfile(updatedUser.uid);
+    } finally {
+      setProfileLoading(false);
+    }
   };
 
   // Callback when user completes profile setup
@@ -127,7 +157,7 @@ function App() {
   };
 
   // Render initial loading screen while Firebase checks session & profile
-  if (authLoading || (user && profileLoading)) {
+  if (authLoading || profileLoading) {
     return (
       <div className="full-page-loader">
         <div className="loader-brand">
@@ -156,7 +186,7 @@ function App() {
       );
     }
 
-    if (!profileData || !profileData.profileCompleted) {
+    if (!isProfileComplete(profileData)) {
       return (
         <div className="app-viewport">
           <div className="bg-glow bg-glow-1"></div>
@@ -206,3 +236,4 @@ function App() {
 }
 
 export default App;
+
