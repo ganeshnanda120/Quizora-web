@@ -7,6 +7,7 @@ import Register from './components/Auth/Register';
 import VerifyEmail from './components/Auth/VerifyEmail';
 import CompleteProfile from './components/Profile/CompleteProfile';
 import Dashboard from './pages/Dashboard';
+import logoImg from './assets/logo.png';
 import './App.css';
 
 function App() {
@@ -130,10 +131,7 @@ function App() {
     return (
       <div className="full-page-loader">
         <div className="loader-brand">
-          <svg className="loader-logo" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-            <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" strokeLinecap="round" strokeLinejoin="round"/>
-          </svg>
-          <h2>Quizora</h2>
+          <img src={logoImg} alt="Logo" className="loader-logo" />
         </div>
         <div className="spinner large"></div>
         <p>Loading application...</p>

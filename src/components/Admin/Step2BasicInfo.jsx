@@ -359,19 +359,19 @@ export default function Step2BasicInfo({
       {/* Main Start and End Time Schedule */}
       <div className="form-card-section">
         <h3 className="section-subtitle">Main Activity Schedule</h3>
-        <p className="field-hint mb-3">
+        <p className="field-hint schedule-field-hint">
           Main activity schedule controls overall availability. Individual part times (if configured) must fall inside this schedule.
         </p>
 
-        <div className="form-grid-2">
-          <div className="form-group">
+        <div className="main-schedule-row">
+          <div className="form-group schedule-input-group">
             <label className="form-label" htmlFor="startTime">
               Starting Date & Time <span className="req-star">*</span>
             </label>
             <input
               type="datetime-local"
               id="startTime"
-              className="form-input"
+              className="form-input schedule-datetime-input"
               min={minStartStr}
               value={formData.startTime || ''}
               onChange={(e) => handleInputChange('startTime', e.target.value)}
@@ -380,14 +380,14 @@ export default function Step2BasicInfo({
             {errors.startTime && <span className="field-error-text">{errors.startTime}</span>}
           </div>
 
-          <div className="form-group">
+          <div className="form-group schedule-input-group">
             <label className="form-label" htmlFor="endTime">
               Ending Date & Time <span className="req-star">*</span>
             </label>
             <input
               type="datetime-local"
               id="endTime"
-              className="form-input"
+              className="form-input schedule-datetime-input"
               min={formData.startTime || minStartStr}
               value={formData.endTime || ''}
               onChange={(e) => handleInputChange('endTime', e.target.value)}
@@ -405,13 +405,13 @@ export default function Step2BasicInfo({
         {/* GLOBAL PART NAVIGATION CONFIGURATION (Shown ONLY when 2 or more parts exist) */}
         {parts.length >= 2 && (
           <div className="global-part-nav-card p-4 mb-4 rounded border bg-light">
-            <h4 className="global-nav-title font-bold text-dark mb-3">
+            <h4 className="global-nav-title font-bold text-dark mb-4">
               Part Navigation Configuration
             </h4>
 
             <div className="radio-options-vertical">
               {/* Option A (Default) */}
-              <label className="radio-option-card mb-2">
+              <label className="radio-option-card">
                 <input
                   type="radio"
                   name="partNavigationMode"
@@ -419,16 +419,13 @@ export default function Step2BasicInfo({
                   checked={(formData.partNavigationMode || 'sequential') === 'sequential'}
                   onChange={(e) => handleInputChange('partNavigationMode', e.target.value)}
                 />
-                <div className="radio-label-content">
+                <span className="radio-label text-dark text-sm">
                   <strong>Start next part after completing previous part</strong>
-                  <span className="radio-desc block text-muted text-xs mt-1">
-                    User can move to the next part only after completing the previous part. No individual time fields. Follows main activity schedule.
-                  </span>
-                </div>
+                </span>
               </label>
 
               {/* Option B */}
-              <label className="radio-option-card mb-2">
+              <label className="radio-option-card">
                 <input
                   type="radio"
                   name="partNavigationMode"
@@ -436,12 +433,9 @@ export default function Step2BasicInfo({
                   checked={formData.partNavigationMode === 'free'}
                   onChange={(e) => handleInputChange('partNavigationMode', e.target.value)}
                 />
-                <div className="radio-label-content">
+                <span className="radio-label text-dark text-sm">
                   <strong>Allow user to move to next part before completing previous part</strong>
-                  <span className="radio-desc block text-muted text-xs mt-1">
-                    User can manually move between parts before completing previous part. No individual time fields. Follows main activity schedule.
-                  </span>
-                </div>
+                </span>
               </label>
 
               {/* Option C */}
@@ -453,12 +447,9 @@ export default function Step2BasicInfo({
                   checked={formData.partNavigationMode === 'individualTime'}
                   onChange={(e) => handleInputChange('partNavigationMode', e.target.value)}
                 />
-                <div className="radio-label-content">
+                <span className="radio-label text-dark text-sm">
                   <strong>Set individual time for each part</strong>
-                  <span className="radio-desc block text-muted text-xs mt-1">
-                    Individual time configuration fields will appear under each part inside its card.
-                  </span>
-                </div>
+                </span>
               </label>
             </div>
           </div>
@@ -466,20 +457,20 @@ export default function Step2BasicInfo({
 
         {errors.parts && <span className="field-error-text mb-3 block">{errors.parts}</span>}
 
-        {/* PARTS LIST (Each Part rendered inside its OWN card/box) */}
+        {/* PARTS LIST (Each Part rendered inside its OWN compact card/box) */}
         <div className="parts-container-list">
           {parts.map((part, index) => {
             const isEditing = editingTitleIdx === index;
             const showIndividualTime = parts.length >= 2 && formData.partNavigationMode === 'individualTime';
 
             return (
-              <div key={part.id || index} className="part-card-box p-4 mb-3 border rounded bg-white shadow-sm">
+              <div key={part.id || index} className="part-card-box compact-part-card">
                 {/* Part Card Header Row */}
                 <div className="part-card-header flex-between align-center">
-                  {/* Left Side: Part Name */}
+                  {/* Left Side: Part Name / Edit Inputs */}
                   <div className="part-title-wrapper">
                     {isEditing ? (
-                      <div className="flex-align-center gap-2">
+                      <div className="part-edit-inline-row">
                         <input
                           type="text"
                           className="form-input part-title-input"
@@ -491,61 +482,70 @@ export default function Step2BasicInfo({
                           placeholder="Part Name (e.g. Physics, Section A)"
                           autoFocus
                         />
-                        <button
-                          type="button"
-                          className="btn btn-primary btn-xs"
-                          onClick={() => handleSaveTitle(index)}
-                        >
-                          Save
-                        </button>
-                        <button
-                          type="button"
-                          className="btn btn-secondary btn-xs"
-                          onClick={() => {
-                            setEditingTitleIdx(null);
-                            setEditError('');
-                          }}
-                        >
-                          Cancel
-                        </button>
+                        <div className="part-edit-btn-group">
+                          <button
+                            type="button"
+                            className="btn btn-primary btn-sm btn-save-part"
+                            onClick={() => handleSaveTitle(index)}
+                          >
+                            Save
+                          </button>
+                          <button
+                            type="button"
+                            className="btn btn-secondary btn-sm btn-cancel-part"
+                            onClick={() => {
+                              setEditingTitleIdx(null);
+                              setEditError('');
+                            }}
+                          >
+                            Cancel
+                          </button>
+                        </div>
                       </div>
                     ) : (
-                      <span className="part-name-heading font-bold text-dark text-base">
-                        {part.title || `Part ${index + 1}`}
-                      </span>
+                      <div className="part-title-display flex-align-center gap-3">
+                        <span className="part-name-heading font-bold text-dark text-base">
+                          {part.title || `Part ${index + 1}`}
+                        </span>
+                        {/* Change Name Button Placed directly to the right of Part Name */}
+                        <button
+                          type="button"
+                          className="btn-part-action btn-edit-part"
+                          onClick={() => {
+                            setEditingTitleIdx(index);
+                            setTempTitle(part.title || `Part ${index + 1}`);
+                            setEditError('');
+                          }}
+                          title="Change Part Name"
+                          aria-label="Change Part Name"
+                        >
+                          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="13" height="13">
+                            <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+                            <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+                          </svg>
+                          <span>Change Name</span>
+                        </button>
+                      </div>
                     )}
                   </div>
 
-                  {/* Right Side: Edit & Delete Action Buttons */}
-                  {!isEditing && (
-                    <div className="part-card-actions-right flex-align-center gap-2">
-                      {/* Edit Icon Button */}
+                  {/* Far-Right Side: Delete Action Button (ONLY when 2+ parts exist) */}
+                  {!isEditing && parts.length > 1 && (
+                    <div className="part-card-actions-right">
                       <button
                         type="button"
-                        className="btn btn-icon-only text-primary"
-                        onClick={() => {
-                          setEditingTitleIdx(index);
-                          setTempTitle(part.title || `Part ${index + 1}`);
-                          setEditError('');
-                        }}
-                        title="Edit Part Name"
-                        aria-label="Edit Part Name"
+                        className="btn-part-action btn-delete-icon-only"
+                        onClick={() => setDeleteConfirmIdx(index)}
+                        title="Delete Part"
+                        aria-label="Delete Part"
                       >
-                        ✏️
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="15" height="15">
+                          <polyline points="3 6 5 6 21 6"/>
+                          <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
+                          <line x1="10" y1="11" x2="10" y2="17" />
+                          <line x1="14" y1="11" x2="14" y2="17" />
+                        </svg>
                       </button>
-
-                      {/* Delete Icon Button (ONLY when 2+ parts exist) */}
-                      {parts.length > 1 && (
-                        <button
-                          type="button"
-                          className="btn btn-icon-only text-danger"
-                          onClick={() => setDeleteConfirmIdx(index)}
-                          title="Delete Part"
-                          aria-label="Delete Part"
-                        >
-                          🗑️
-                        </button>
-                      )}
                     </div>
                   )}
                 </div>
@@ -554,66 +554,66 @@ export default function Step2BasicInfo({
                   <span className="field-error-text mt-2 block">{editError}</span>
                 )}
 
-                {/* Part Total Marks input if 2+ parts exist */}
-                {parts.length >= 2 && (
-                  <div className="part-marks-box mt-3 pt-3 border-top">
-                    <div className="form-group mb-0">
-                      <label className="form-label text-xs font-semibold">
-                        Part Total Marks <span className="optional-tag">(Out of {formData.totalMarks || 'Main Total'})</span>
-                      </label>
-                      <input
-                        type="number"
-                        min="1"
-                        className="form-input form-input-sm"
-                        placeholder="e.g. 50"
-                        value={part.partTotalMarks || ''}
-                        onChange={(e) => handlePartChange(index, 'partTotalMarks', e.target.value)}
-                      />
-                    </div>
-                  </div>
-                )}
-
-                {/* Individual Time Fields CONTAINED INSIDE THIS PART'S CARD (ONLY when Option C is active AND 2+ parts exist) */}
-                {showIndividualTime && (
-                  <div className="part-card-time-settings mt-3 pt-3 border-top">
-                    <h5 className="font-semibold text-xs text-dark mb-2 uppercase tracking-wide">Individual Time</h5>
-                    <div className="form-grid-2">
-                      <div className="form-group mb-0">
-                        <label className="form-label text-xs">
-                          Start: <span className="req-star">*</span>
+                {/* Below Part Name: Part Marks on Left, and Individual Time on Right (when Option C is active) */}
+                {(parts.length >= 2 || showIndividualTime) && (
+                  <div className="part-config-details-row mt-3 pt-3 border-top">
+                    {/* Part Marks on Left */}
+                    {parts.length >= 2 && (
+                      <div className="part-marks-field-box">
+                        <label className="form-label text-xs font-semibold">
+                          Part Marks <span className="optional-tag font-normal">(Out of {formData.totalMarks || 'Main Total'})</span>
                         </label>
                         <input
-                          type="datetime-local"
-                          className="form-input"
-                          value={part.individualStartTime || ''}
-                          min={formData.startTime || minStartStr}
-                          max={formData.endTime || undefined}
-                          onChange={(e) => handlePartChange(index, 'individualStartTime', e.target.value)}
-                          required
+                          type="number"
+                          min="1"
+                          className="form-input form-input-sm part-marks-input-sm"
+                          placeholder="e.g. 50"
+                          value={part.partTotalMarks || ''}
+                          onChange={(e) => handlePartChange(index, 'partTotalMarks', e.target.value)}
                         />
-                        {errors[`part_${index}_start`] && (
-                          <span className="field-error-text mt-1">{errors[`part_${index}_start`]}</span>
-                        )}
                       </div>
+                    )}
 
-                      <div className="form-group mb-0">
-                        <label className="form-label text-xs">
-                          End: <span className="req-star">*</span>
-                        </label>
-                        <input
-                          type="datetime-local"
-                          className="form-input"
-                          value={part.individualEndTime || ''}
-                          min={part.individualStartTime || formData.startTime || minStartStr}
-                          max={formData.endTime || undefined}
-                          onChange={(e) => handlePartChange(index, 'individualEndTime', e.target.value)}
-                          required
-                        />
-                        {errors[`part_${index}_end`] && (
-                          <span className="field-error-text mt-1">{errors[`part_${index}_end`]}</span>
-                        )}
+                    {/* Individual Time on Right (when Option C is active) */}
+                    {showIndividualTime && (
+                      <div className="part-inline-time-container">
+                        <div className="part-time-field">
+                          <label className="form-label text-xs">
+                            Start: <span className="req-star">*</span>
+                          </label>
+                          <input
+                            type="datetime-local"
+                            className="form-input form-input-sm part-time-input-sm"
+                            value={part.individualStartTime || ''}
+                            min={formData.startTime || minStartStr}
+                            max={formData.endTime || undefined}
+                            onChange={(e) => handlePartChange(index, 'individualStartTime', e.target.value)}
+                            required
+                          />
+                          {errors[`part_${index}_start`] && (
+                            <span className="field-error-text mt-1">{errors[`part_${index}_start`]}</span>
+                          )}
+                        </div>
+
+                        <div className="part-time-field">
+                          <label className="form-label text-xs">
+                            End: <span className="req-star">*</span>
+                          </label>
+                          <input
+                            type="datetime-local"
+                            className="form-input form-input-sm part-time-input-sm"
+                            value={part.individualEndTime || ''}
+                            min={part.individualStartTime || formData.startTime || minStartStr}
+                            max={formData.endTime || undefined}
+                            onChange={(e) => handlePartChange(index, 'individualEndTime', e.target.value)}
+                            required
+                          />
+                          {errors[`part_${index}_end`] && (
+                            <span className="field-error-text mt-1">{errors[`part_${index}_end`]}</span>
+                          )}
+                        </div>
                       </div>
-                    </div>
+                    )}
                   </div>
                 )}
               </div>
@@ -621,8 +621,8 @@ export default function Step2BasicInfo({
           })}
         </div>
 
-        {/* + ADD MORE PART BUTTON (Positioned Below Part Cards with distinct color) */}
-        <div className="mt-4 text-left">
+        {/* + ADD MORE PART BUTTON (Single plus icon & label) */}
+        <div className="mt-3 text-left">
           <button
             type="button"
             className="btn btn-add-part-colored"
@@ -632,7 +632,7 @@ export default function Step2BasicInfo({
               <line x1="12" y1="5" x2="12" y2="19" />
               <line x1="5" y1="12" x2="19" y2="12" />
             </svg>
-            <span>+ Add More Part</span>
+            <span>Add More Part</span>
           </button>
         </div>
       </div>
@@ -651,7 +651,9 @@ export default function Step2BasicInfo({
                 checked={formData.timeConfiguration === opt.id}
                 onChange={(e) => handleInputChange('timeConfiguration', e.target.value)}
               />
-              <span className="radio-label">{opt.label}</span>
+              <span className="radio-label text-dark text-sm">
+                <strong>{opt.label}</strong>
+              </span>
             </label>
           ))}
         </div>
@@ -661,16 +663,16 @@ export default function Step2BasicInfo({
       <div className="form-card-section">
         <h3 className="section-subtitle">Access & Participant Controls</h3>
 
-        <div className="form-grid-2">
+        <div className="access-controls-row">
           {/* Password (Optional) */}
-          <div className="form-group">
+          <div className="form-group access-control-input-group">
             <label className="form-label" htmlFor="password">
               Password Protection <span className="optional-tag">(Optional)</span>
             </label>
             <input
               type="password"
               id="password"
-              className="form-input"
+              className="form-input access-control-input"
               placeholder="Leave blank for no password"
               value={formData.password || ''}
               onChange={(e) => handleInputChange('password', e.target.value)}
@@ -678,14 +680,14 @@ export default function Step2BasicInfo({
           </div>
 
           {/* Number of Participants */}
-          <div className="form-group">
+          <div className="form-group access-control-input-group">
             <label className="form-label" htmlFor="participantLimit">
               Number of Participants <span className="optional-tag">(Optional, empty = unlimited)</span>
             </label>
             <input
               type="number"
               id="participantLimit"
-              className="form-input"
+              className="form-input access-control-input"
               placeholder="e.g. 50"
               min="1"
               value={formData.participantLimit || ''}

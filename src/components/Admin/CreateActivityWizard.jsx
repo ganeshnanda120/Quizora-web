@@ -4,6 +4,7 @@ import Step3QuestionsSetup from './Step3QuestionsSetup';
 import Step4ParticipantForm from './Step4ParticipantForm';
 import Step5FinalizeShare from './Step5FinalizeShare';
 import { generateActivityId, saveActivityDraft, publishActivity } from '../../services/activityService';
+import logoImg from '../../assets/logo.png';
 
 export default function CreateActivityWizard({ user, profileData, onClose, onActivityCreated }) {
   // Starts directly at Basic Info (Step 1 of creation wizard)
@@ -108,9 +109,9 @@ export default function CreateActivityWizard({ user, profileData, onClose, onAct
   return (
     <div className="fullscreen-wizard-overlay fade-in">
       <div className="fullscreen-wizard-container">
-        {/* Wizard Top Header Bar with Circular Back Button on top-left corner */}
+        {/* Wizard Top Header Bar with Back Button on Left, and Logo + Activity Creator on Right */}
         <div className="fullscreen-wizard-header">
-          <div className="header-left-actions">
+          <div className="wizard-header-left">
             <button
               type="button"
               className="btn-back-circular"
@@ -140,38 +141,47 @@ export default function CreateActivityWizard({ user, profileData, onClose, onAct
             </button>
           </div>
 
-          <div className="brand-badge-sm">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="20" height="20">
-              <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" strokeLinecap="round" strokeLinejoin="round"/>
-            </svg>
-            <span>Quizora Activity Creator</span>
+          <div className="wizard-header-right">
+            <div className="brand-badge-sm">
+              <img src={logoImg} alt="Quizora" className="brand-logo-img" />
+              <span className="wizard-header-title">Activity Creator</span>
+            </div>
           </div>
-
-          <button className="modal-close-btn" onClick={onClose} aria-label="Exit wizard">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="22" height="22">
-              <line x1="18" y1="6" x2="6" y2="18"/>
-              <line x1="6" y1="6" x2="18" y2="18"/>
-            </svg>
-          </button>
         </div>
 
-        {/* Step Progress Bar (4 Streamlined Steps) */}
+        {/* Step Progress Bar (4 Streamlined Connected Steps) */}
         <div className="wizard-progress-bar">
-          {[
-            { num: 1, label: 'Basic Info' },
-            { num: 2, label: 'Questions' },
-            { num: 3, label: 'Participant Form' },
-            { num: 4, label: 'Share Link' }
-          ].map((s) => {
-            const isActive = currentStep === s.num;
-            const isDone = currentStep > s.num;
-            return (
-              <div key={s.num} className={`progress-step-item ${isActive ? 'active' : ''} ${isDone ? 'done' : ''}`}>
-                <div className="step-num-circle">{isDone ? '✓' : s.num}</div>
-                <span className="step-label-text">{s.label}</span>
-              </div>
-            );
-          })}
+          <div className="wizard-progress-track">
+            {[
+              { num: 1, label: 'Basic Info', mobileLabel: 'Info' },
+              { num: 2, label: 'Questions', mobileLabel: 'Questions' },
+              { num: 3, label: 'Participant Form', mobileLabel: 'Form' },
+              { num: 4, label: 'Share Link', mobileLabel: 'Share' }
+            ].map((s, index, arr) => {
+              const isActive = currentStep === s.num;
+              const isDone = currentStep > s.num;
+              return (
+                <div key={s.num} className={`wizard-step-node ${isActive ? 'active' : ''} ${isDone ? 'done' : ''}`}>
+                  <div className="step-badge-pill">
+                    <span className="step-circle">
+                      {isDone ? (
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" width="13" height="13">
+                          <polyline points="20 6 9 17 4 12" />
+                        </svg>
+                      ) : (
+                        s.num
+                      )}
+                    </span>
+                    <span className="step-text-desktop">{s.label}</span>
+                    <span className="step-text-mobile">{s.mobileLabel}</span>
+                  </div>
+                  {index < arr.length - 1 && (
+                    <div className={`step-connector ${isDone ? 'done' : ''}`} />
+                  )}
+                </div>
+              );
+            })}
+          </div>
         </div>
 
         {/* Wizard Content Body */}

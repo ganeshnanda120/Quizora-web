@@ -7,6 +7,7 @@ import CreateActivityWizard from '../components/Admin/CreateActivityWizard';
 import AdminHome from '../components/Admin/AdminHome';
 import Step5FinalizeShare from '../components/Admin/Step5FinalizeShare';
 import { getActivityById } from '../services/activityService';
+import logoImg from '../assets/logo.png';
 
 export default function Dashboard({ user, profileData, onProfileUpdated }) {
   const [activeSection, setActiveSection] = useState('user'); // 'selector', 'user', 'admin'
@@ -132,39 +133,38 @@ export default function Dashboard({ user, profileData, onProfileUpdated }) {
     <div className="dashboard-layout">
       {/* DASHBOARD HEADER */}
       <header className="dashboard-header">
-        <div className="dashboard-container header-content">
-          {/* Brand Logo */}
-          <div className="brand-badge">
-            <svg className="brand-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" strokeLinecap="round" strokeLinejoin="round"/>
-            </svg>
-            <span className="brand-name">Quizora</span>
-          </div>
+        <div className="dashboard-header-inner">
+          {/* Left Side: Brand Logo + Greeting with space */}
+          <div className="header-left-group">
+            <div className="header-brand-box" title="Quizora">
+              <img src={logoImg} alt="Quizora" className="navbar-logo-img" />
+            </div>
 
-          {/* Header Left: Greeting according to local time & Full Name */}
-          <div className="header-greeting-box">
-            <h2 className="header-user-name">{greeting}</h2>
-            <div className="header-welcome-line">
-              <span className="welcome-greeting">Welcome back!</span>
-              <span className="greeting-divider">•</span>
-              <span className="welcome-quote">"{quote}"</span>
+            <div className="header-greeting-box">
+              <h2 className="header-user-name">{greeting}</h2>
+              <div className="header-welcome-line">
+                <span className="welcome-greeting">Welcome back!</span>
+                <span className="greeting-divider">•</span>
+                <span className="welcome-quote">"{quote}"</span>
+              </div>
             </div>
           </div>
 
-          {/* Header Right: Circular Profile Picture */}
-          <div className="user-profile-menu" ref={dropdownRef}>
-            <button
-              className="avatar-btn"
-              onClick={() => setShowDropdown(!showDropdown)}
-              aria-label="User menu"
-              aria-expanded={showDropdown}
-            >
-              {profilePicUrl ? (
-                <img src={profilePicUrl} alt={displayName} className="user-avatar-img" />
-              ) : (
-                <div className="user-avatar-badge">{getInitials(displayName)}</div>
-              )}
-            </button>
+          {/* User Profile Avatar & Dropdown (Far Right) */}
+          <div className="header-right">
+            <div className="user-profile-menu" ref={dropdownRef}>
+              <button
+                className="avatar-btn"
+                onClick={() => setShowDropdown(!showDropdown)}
+                aria-label="User menu"
+                aria-expanded={showDropdown}
+              >
+                {profilePicUrl ? (
+                  <img src={profilePicUrl} alt={displayName} className="user-avatar-img" />
+                ) : (
+                  <div className="user-avatar-badge">{getInitials(displayName)}</div>
+                )}
+              </button>
 
             {/* Profile Dropdown Menu */}
             {showDropdown && (
@@ -223,6 +223,7 @@ export default function Dashboard({ user, profileData, onProfileUpdated }) {
                 </button>
               </div>
             )}
+            </div>
           </div>
         </div>
       </header>
@@ -240,7 +241,7 @@ export default function Dashboard({ user, profileData, onProfileUpdated }) {
                 <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
                 <circle cx="12" cy="7" r="4"/>
               </svg>
-              <span>USER DASHBOARD</span>
+              <span>USER</span>
             </button>
 
             <button
@@ -250,7 +251,7 @@ export default function Dashboard({ user, profileData, onProfileUpdated }) {
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                 <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
               </svg>
-              <span>ADMIN DASHBOARD</span>
+              <span>ADMIN</span>
             </button>
           </div>
         </div>

@@ -243,39 +243,62 @@ export default function ProfileModal({ user, profileData, initialMode = 'view', 
         ) : (
           <form onSubmit={handleSave} className="profile-edit-form">
             <div className="profile-pic-section">
-              <div className="avatar-preview-wrapper">
-                {previewUrl ? (
-                  <img src={previewUrl} alt="Preview" className="avatar-preview-img" />
-                ) : (
-                  <div className="avatar-preview-fallback">{getInitials(fullName)}</div>
-                )}
-                <label htmlFor="edit-profile-upload" className="avatar-upload-badge" title="Change Photo">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="16" height="16">
-                    <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/>
-                    <circle cx="12" cy="13" r="4"/>
-                  </svg>
-                </label>
-              </div>
-
-              <div className="file-upload-action">
-                <input
-                  type="file"
-                  id="edit-profile-upload"
-                  accept="image/jpeg, image/jpg, image/png, image/webp"
-                  onChange={handleImageChange}
-                  style={{ display: 'none' }}
-                />
-                <div className="avatar-action-buttons">
-                  <label htmlFor="edit-profile-upload" className="btn btn-secondary btn-sm upload-btn">
-                    <span>{previewUrl ? 'Change Photo' : 'Upload Photo'}</span>
-                  </label>
-                  {(selectedFile || (previewUrl && previewUrl !== user?.photoURL)) && (
-                    <button type="button" className="btn btn-ghost btn-sm remove-photo-btn" onClick={handleRemoveCustomPhoto}>
-                      Remove Custom Photo
-                    </button>
+              <div className="avatar-preview-container">
+                <div 
+                  className="avatar-preview-wrapper"
+                  onClick={() => document.getElementById('edit-profile-upload')?.click()}
+                  title="Click to choose profile picture"
+                >
+                  {previewUrl ? (
+                    <img src={previewUrl} alt="Preview" className="avatar-preview-img" />
+                  ) : (
+                    <div className="avatar-preview-fallback">{getInitials(fullName)}</div>
                   )}
+                  <div className="avatar-upload-badge" title="Change Photo">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="16" height="16">
+                      <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/>
+                      <circle cx="12" cy="13" r="4"/>
+                    </svg>
+                  </div>
                 </div>
-                <span className="file-hint">JPG, JPEG, PNG or WEBP</span>
+
+                <div className="avatar-controls-box">
+                  <input
+                    type="file"
+                    id="edit-profile-upload"
+                    accept="image/jpeg, image/jpg, image/png, image/webp"
+                    onChange={handleImageChange}
+                    style={{ display: 'none' }}
+                  />
+                  <div className="avatar-action-buttons">
+                    <button
+                      type="button"
+                      className="btn-upload-photo"
+                      onClick={() => document.getElementById('edit-profile-upload')?.click()}
+                    >
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="15" height="15">
+                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                        <polyline points="17 8 12 3 7 8"/>
+                        <line x1="12" y1="3" x2="12" y2="15"/>
+                      </svg>
+                      <span>{previewUrl ? 'Change Photo' : 'Upload Photo'}</span>
+                    </button>
+                    {(selectedFile || (previewUrl && previewUrl !== user?.photoURL)) && (
+                      <button 
+                        type="button" 
+                        className="btn-remove-photo" 
+                        onClick={handleRemoveCustomPhoto}
+                      >
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="14" height="14">
+                          <line x1="18" y1="6" x2="6" y2="18"/>
+                          <line x1="6" y1="6" x2="18" y2="18"/>
+                        </svg>
+                        <span>Remove</span>
+                      </button>
+                    )}
+                  </div>
+                  <span className="file-hint">JPG, PNG or WEBP (Max 5MB)</span>
+                </div>
               </div>
             </div>
 
