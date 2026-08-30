@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { getAdminSubmissions, getAdminActivities } from '../../services/adminService';
 import SubmissionChecker from './SubmissionChecker';
 
@@ -14,7 +14,7 @@ export default function SubmissionsList({ user, onBack }) {
   // Selected submission for grading
   const [selectedSubmission, setSelectedSubmission] = useState(null);
 
-  const loadSubmissionsData = async () => {
+  const loadSubmissionsData = useCallback(async () => {
     if (!user?.uid) return;
     setLoading(true);
     try {
@@ -33,39 +33,19 @@ export default function SubmissionsList({ user, onBack }) {
     } finally {
       setLoading(false);
     }
-  };
+  }, [user]);
 
   useEffect(() => {
-    let isMounted = true;
-    async function fetchData() {
-      if (!user?.uid) return;
-      setLoading(true);
-      try {
-        const subList = await getAdminSubmissions(user.uid);
-        const actList = await getAdminActivities(user.uid);
-
-        const aMap = {};
-        actList.forEach((a) => {
-          aMap[a.activityId] = a;
-        });
-
-        if (isMounted) {
-          setSubmissions(subList);
-          setActivitiesMap(aMap);
-        }
-      } catch (err) {
-        console.warn("Load admin submissions error:", err);
-      } finally {
-        if (isMounted) {
-          setLoading(false);
-        }
-      }
+    let active = true;
+    if (user?.uid) {
+      Promise.resolve().then(() => {
+        if (active) loadSubmissionsData();
+      });
     }
-    fetchData();
     return () => {
-      isMounted = false;
+      active = false;
     };
-  }, [user]);
+  }, [user, loadSubmissionsData]);
 
   // Filter and sort submissions
   const filteredSubmissions = submissions.filter((sub) => {

@@ -24,6 +24,7 @@ export default function CreateActivityWizard({ user, profileData, onClose, onAct
     totalMarks: '',
     startTime: '',
     endTime: '',
+    partMode: 'parts', // 'parts' (Tab 1: Part Configuration) | 'sections' (Tab 2: Sections / Groups)
     partNavigationMode: 'sequential', // 'sequential' (A), 'free' (B), 'individualTime' (C)
     isMultiPart: false,
     parts: [
@@ -36,6 +37,7 @@ export default function CreateActivityWizard({ user, profileData, onClose, onAct
         questions: []
       }
     ],
+    sections: [],
     timeConfiguration: 'start_on_begin',
     duration: { months: 0, hours: 1, minutes: 0, seconds: 0 },
     password: '',
@@ -96,13 +98,20 @@ export default function CreateActivityWizard({ user, profileData, onClose, onAct
     }
   };
 
-  // Reset all questions in all parts and return to Questions Setup (Step 2)
+  // Reset all questions in all parts (and sections) and return to Questions Setup (Step 2)
   const handleResetQuestionsAndBack = () => {
     const resetParts = (formData.parts || []).map((p) => ({
       ...p,
       questions: []
     }));
-    updateFormData({ parts: resetParts });
+    const resetSections = (formData.sections || []).map((sec) => ({
+      ...sec,
+      parts: (sec.parts || []).map((p) => ({
+        ...p,
+        questions: []
+      }))
+    }));
+    updateFormData({ parts: resetParts, sections: resetSections });
     setCurrentStep(2);
   };
 

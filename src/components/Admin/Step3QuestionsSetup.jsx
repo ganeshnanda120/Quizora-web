@@ -10,14 +10,21 @@ export default function Step3QuestionsSetup({
   onBack,
   saving
 }) {
+  const partMode = formData.partMode || 'parts'; // 'parts' | 'sections'
+
+  // Normal parts (Tab 1)
   const parts = formData.parts || [{ id: 'part_1', title: 'Part 1', questions: [] }];
 
+  // Sections (Tab 2)
+  const sections = formData.sections || [];
+
   // Modal & Selection States
-  const [typeSelectorPartIndex, setTypeSelectorPartIndex] = useState(null);
+  const [typeSelectorTarget, setTypeSelectorTarget] = useState(null); // { secIdx, partIndex }
   const [editorMode, setEditorMode] = useState(null); // null, 'mcq', 'written', 'upload_paper'
+  const [editingSecIdx, setEditingSecIdx] = useState(null);
   const [editingPartIndex, setEditingPartIndex] = useState(0);
   const [editingQuestionIndex, setEditingQuestionIndex] = useState(null);
-  const [deletingTarget, setDeletingTarget] = useState(null); // { partIndex, qIdx, question }
+  const [deletingTarget, setDeletingTarget] = useState(null); // { secIdx, partIndex, qIdx, question }
   const [showCancelQuestionsModal, setShowCancelQuestionsModal] = useState(false);
 
   const [error, setError] = useState('');
@@ -27,8 +34,6 @@ export default function Step3QuestionsSetup({
   const [questionText, setQuestionText] = useState('');
   const [marks, setMarks] = useState(formData.purpose === 'Exam' ? '1' : '');
   const [description, setDescription] = useState('');
-
-
 
   // Image & File attachment states
   const [questionImageFile, setQuestionImageFile] = useState(null);
@@ -53,14 +58,15 @@ export default function Step3QuestionsSetup({
     setError('');
   };
 
-  const openTypeSelector = (pIdx) => {
+  const openTypeSelector = (pIdx, sIdx = null) => {
     setError('');
-    setTypeSelectorPartIndex(pIdx);
+    setTypeSelectorTarget({ secIdx: sIdx, partIndex: pIdx });
   };
 
-  const openEditor = (pIdx, type, questionToEdit = null, qIdx = null) => {
+  const openEditor = (pIdx, type, questionToEdit = null, qIdx = null, sIdx = null) => {
     resetQuestionForm();
-    setTypeSelectorPartIndex(null);
+    setTypeSelectorTarget(null);
+    setEditingSecIdx(sIdx);
     setEditingPartIndex(pIdx);
     setEditorMode(type);
 
@@ -112,7 +118,7 @@ export default function Step3QuestionsSetup({
     setQuestionImageUrl(preview);
   };
 
-  // Save Question into editingPartIndex
+  // Save Question into active section/part
   const handleSaveQuestion = async () => {
     setError('');
 
@@ -145,10 +151,16 @@ export default function Step3QuestionsSetup({
         finalPaperUrl = await uploadActivityFile(activityId, paperFile);
       }
 
-      const currentPartQuestions = parts[editingPartIndex]?.questions || [];
+      const isSecMode = partMode === 'sections' && editingSecIdx !== null && editingSecIdx !== undefined;
+
+      const activePartsList = isSecMode
+        ? (sections[editingSecIdx]?.parts || [])
+        : parts;
+
+      const currentPartQuestions = activePartsList[editingPartIndex]?.questions || [];
 
       const questionObj = {
-        id: editingQuestionIndex !== null ? currentPartQuestions[editingQuestionIndex].id : `q_${Date.now()}`,
+        id: editingQuestionIndex !== null ? currentPartQuestions[editingQuestionIndex].id : `q_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
         type: editorMode,
         questionText: questionText.trim(),
         marks: marks ? parseFloat(marks) : null,
@@ -159,21 +171,47 @@ export default function Step3QuestionsSetup({
         createdAt: new Date().toISOString()
       };
 
-      const updatedParts = [...parts];
-      const partQuestions = [...(updatedParts[editingPartIndex].questions || [])];
+      if (isSecMode) {
+        const updatedSections = [...sections];
+        const secParts = [...(updatedSections[editingSecIdx]?.parts || [])];
+        const targetPart = secParts[editingPartIndex] || { id: `sec_${editingSecIdx}_p_${editingPartIndex}`, title: `Part ${editingPartIndex + 1}`, questions: [] };
+        const partQuestions = [...(targetPart.questions || [])];
 
-      if (editingQuestionIndex !== null) {
-        partQuestions[editingQuestionIndex] = questionObj;
+        if (editingQuestionIndex !== null) {
+          partQuestions[editingQuestionIndex] = questionObj;
+        } else {
+          partQuestions.push(questionObj);
+        }
+
+        secParts[editingPartIndex] = {
+          ...targetPart,
+          questions: partQuestions
+        };
+
+        updatedSections[editingSecIdx] = {
+          ...updatedSections[editingSecIdx],
+          parts: secParts
+        };
+
+        updateFormData({ sections: updatedSections });
       } else {
-        partQuestions.push(questionObj);
+        const updatedParts = [...parts];
+        const partQuestions = [...(updatedParts[editingPartIndex]?.questions || [])];
+
+        if (editingQuestionIndex !== null) {
+          partQuestions[editingQuestionIndex] = questionObj;
+        } else {
+          partQuestions.push(questionObj);
+        }
+
+        updatedParts[editingPartIndex] = {
+          ...updatedParts[editingPartIndex],
+          questions: partQuestions
+        };
+
+        updateFormData({ parts: updatedParts });
       }
 
-      updatedParts[editingPartIndex] = {
-        ...updatedParts[editingPartIndex],
-        questions: partQuestions
-      };
-
-      updateFormData({ parts: updatedParts });
       resetQuestionForm();
     } catch (err) {
       console.error("Save question error:", err);
@@ -185,22 +223,49 @@ export default function Step3QuestionsSetup({
 
   // Dedicated Save Handler for Full-Screen MCQ Editor
   const handleSaveMCQQuestion = (questionObj, addMore = false) => {
-    const updatedParts = [...parts];
-    const targetPart = updatedParts[editingPartIndex] || { id: `part_${editingPartIndex + 1}`, title: `Part ${editingPartIndex + 1}`, questions: [] };
-    const partQuestions = [...(targetPart.questions || [])];
+    const isSecMode = partMode === 'sections' && editingSecIdx !== null && editingSecIdx !== undefined;
 
-    if (editingQuestionIndex !== null && editingQuestionIndex !== undefined) {
-      partQuestions[editingQuestionIndex] = questionObj;
+    if (isSecMode) {
+      const updatedSections = [...sections];
+      const secParts = [...(updatedSections[editingSecIdx]?.parts || [])];
+      const targetPart = secParts[editingPartIndex] || { id: `sec_${editingSecIdx}_p_${editingPartIndex}`, title: `Part ${editingPartIndex + 1}`, questions: [] };
+      const partQuestions = [...(targetPart.questions || [])];
+
+      if (editingQuestionIndex !== null && editingQuestionIndex !== undefined) {
+        partQuestions[editingQuestionIndex] = questionObj;
+      } else {
+        partQuestions.push(questionObj);
+      }
+
+      secParts[editingPartIndex] = {
+        ...targetPart,
+        questions: partQuestions
+      };
+
+      updatedSections[editingSecIdx] = {
+        ...updatedSections[editingSecIdx],
+        parts: secParts
+      };
+
+      updateFormData({ sections: updatedSections });
     } else {
-      partQuestions.push(questionObj);
+      const updatedParts = [...parts];
+      const targetPart = updatedParts[editingPartIndex] || { id: `part_${editingPartIndex + 1}`, title: `Part ${editingPartIndex + 1}`, questions: [] };
+      const partQuestions = [...(targetPart.questions || [])];
+
+      if (editingQuestionIndex !== null && editingQuestionIndex !== undefined) {
+        partQuestions[editingQuestionIndex] = questionObj;
+      } else {
+        partQuestions.push(questionObj);
+      }
+
+      updatedParts[editingPartIndex] = {
+        ...targetPart,
+        questions: partQuestions
+      };
+
+      updateFormData({ parts: updatedParts });
     }
-
-    updatedParts[editingPartIndex] = {
-      ...targetPart,
-      questions: partQuestions
-    };
-
-    updateFormData({ parts: updatedParts });
 
     if (addMore) {
       setEditingQuestionIndex(null);
@@ -212,38 +277,82 @@ export default function Step3QuestionsSetup({
   // Delete Question handler
   const confirmDeleteQuestion = () => {
     if (!deletingTarget) return;
-    const { partIndex, qIdx } = deletingTarget;
+    const { secIdx, partIndex, qIdx } = deletingTarget;
 
-    const updatedParts = [...parts];
-    const partQuestions = (updatedParts[partIndex].questions || []).filter((_, idx) => idx !== qIdx);
+    if (partMode === 'sections' && secIdx !== undefined && secIdx !== null) {
+      const updatedSections = [...sections];
+      const secParts = [...(updatedSections[secIdx]?.parts || [])];
+      const partQuestions = (secParts[partIndex]?.questions || []).filter((_, idx) => idx !== qIdx);
 
-    updatedParts[partIndex] = {
-      ...updatedParts[partIndex],
-      questions: partQuestions
-    };
+      secParts[partIndex] = {
+        ...secParts[partIndex],
+        questions: partQuestions
+      };
 
-    updateFormData({ parts: updatedParts });
+      updatedSections[secIdx] = {
+        ...updatedSections[secIdx],
+        parts: secParts
+      };
+
+      updateFormData({ sections: updatedSections });
+    } else {
+      const updatedParts = [...parts];
+      const partQuestions = (updatedParts[partIndex]?.questions || []).filter((_, idx) => idx !== qIdx);
+
+      updatedParts[partIndex] = {
+        ...updatedParts[partIndex],
+        questions: partQuestions
+      };
+
+      updateFormData({ parts: updatedParts });
+    }
+
     setDeletingTarget(null);
   };
 
   // Reorder Question handler
-  const handleReorderQuestion = (pIdx, qIdx, direction) => {
-    const updatedParts = [...parts];
-    const qList = [...(updatedParts[pIdx].questions || [])];
-    const targetIdx = direction === 'up' ? qIdx - 1 : qIdx + 1;
+  const handleReorderQuestion = (pIdx, qIdx, direction, sIdx = null) => {
+    if (partMode === 'sections' && sIdx !== null && sIdx !== undefined) {
+      const updatedSections = [...sections];
+      const secParts = [...(updatedSections[sIdx]?.parts || [])];
+      const qList = [...(secParts[pIdx]?.questions || [])];
+      const targetIdx = direction === 'up' ? qIdx - 1 : qIdx + 1;
 
-    if (targetIdx < 0 || targetIdx >= qList.length) return;
+      if (targetIdx < 0 || targetIdx >= qList.length) return;
 
-    const temp = qList[qIdx];
-    qList[qIdx] = qList[targetIdx];
-    qList[targetIdx] = temp;
+      const temp = qList[qIdx];
+      qList[qIdx] = qList[targetIdx];
+      qList[targetIdx] = temp;
 
-    updatedParts[pIdx] = {
-      ...updatedParts[pIdx],
-      questions: qList
-    };
+      secParts[pIdx] = {
+        ...secParts[pIdx],
+        questions: qList
+      };
 
-    updateFormData({ parts: updatedParts });
+      updatedSections[sIdx] = {
+        ...updatedSections[sIdx],
+        parts: secParts
+      };
+
+      updateFormData({ sections: updatedSections });
+    } else {
+      const updatedParts = [...parts];
+      const qList = [...(updatedParts[pIdx]?.questions || [])];
+      const targetIdx = direction === 'up' ? qIdx - 1 : qIdx + 1;
+
+      if (targetIdx < 0 || targetIdx >= qList.length) return;
+
+      const temp = qList[qIdx];
+      qList[qIdx] = qList[targetIdx];
+      qList[targetIdx] = temp;
+
+      updatedParts[pIdx] = {
+        ...updatedParts[pIdx],
+        questions: qList
+      };
+
+      updateFormData({ parts: updatedParts });
+    }
   };
 
   // Format Helper for Question Count
@@ -256,55 +365,128 @@ export default function Step3QuestionsSetup({
   const handleCompleteAllQuestions = () => {
     setError('');
 
-    let totalQuestions = 0;
-    for (let i = 0; i < parts.length; i++) {
-      const p = parts[i];
-      const qList = p.questions || [];
-      totalQuestions += qList.length;
-
-      if (qList.length === 0) {
-        setError(`Part ${i + 1} ("${p.title || `Part ${i + 1}`}") has no questions added. Please click "+ Add Question" to add questions.`);
+    if (partMode === 'sections') {
+      if (sections.length === 0) {
+        setError('Please create at least one section with parts and questions.');
         return;
       }
 
-      if (isExam) {
-        const missingMarks = qList.some((q) => q.marks === null || q.marks === undefined || q.marks <= 0);
-        if (missingMarks) {
-          setError(`All questions in Part ${i + 1} ("${p.title || `Part ${i + 1}`}") must have compulsory marks for an Exam.`);
+      for (let s = 0; s < sections.length; s++) {
+        const sec = sections[s];
+        const secParts = sec.parts || [];
+
+        if (secParts.length === 0) {
+          setError(`Section ${s + 1} ("${sec.name || `Section ${s + 1}`}") has no parts configured.`);
+          return;
+        }
+
+        for (let i = 0; i < secParts.length; i++) {
+          const p = secParts[i];
+          const qList = p.questions || [];
+
+          if (qList.length === 0) {
+            setError(`In section "${sec.name || `Section ${s + 1}`}", Part ${i + 1} ("${p.title || `Part ${i + 1}`}") has no questions added. Please add questions.`);
+            return;
+          }
+
+          if (isExam) {
+            const missingMarks = qList.some((q) => q.marks === null || q.marks === undefined || q.marks <= 0);
+            if (missingMarks) {
+              setError(`In section "${sec.name || `Section ${s + 1}`}", all questions in Part ${i + 1} ("${p.title || `Part ${i + 1}`}") must have compulsory marks for an Exam.`);
+              return;
+            }
+          }
+
+          const targetPartTotal = Number(p.partTotalMarks) || 0;
+          const partQuestionSum = qList.reduce((acc, q) => acc + (Number(q.marks) || 0), 0);
+
+          if (targetPartTotal > 0 && partQuestionSum !== targetPartTotal) {
+            if (partQuestionSum < targetPartTotal) {
+              setError(`In section "${sec.name || `Section ${s + 1}`}", Part ${i + 1} ("${p.title || `Part ${i + 1}`}") total question marks (${partQuestionSum} pts) is less than configured marks (${targetPartTotal} pts).`);
+            } else {
+              setError(`In section "${sec.name || `Section ${s + 1}`}", Part ${i + 1} ("${p.title || `Part ${i + 1}`}") total question marks (${partQuestionSum} pts) exceeds configured marks (${targetPartTotal} pts).`);
+            }
+            return;
+          }
+        }
+      }
+    } else {
+      let totalQuestions = 0;
+      for (let i = 0; i < parts.length; i++) {
+        const p = parts[i];
+        const qList = p.questions || [];
+        totalQuestions += qList.length;
+
+        if (qList.length === 0) {
+          setError(`Part ${i + 1} ("${p.title || `Part ${i + 1}`}") has no questions added. Please click "+ Add Question" to add questions.`);
+          return;
+        }
+
+        if (isExam) {
+          const missingMarks = qList.some((q) => q.marks === null || q.marks === undefined || q.marks <= 0);
+          if (missingMarks) {
+            setError(`All questions in Part ${i + 1} ("${p.title || `Part ${i + 1}`}") must have compulsory marks for an Exam.`);
+            return;
+          }
+        }
+
+        const targetPartTotal = parts.length === 1
+          ? (Number(formData.totalMarks) || 0)
+          : (Number(p.partTotalMarks) || 0);
+
+        const partQuestionSum = qList.reduce((acc, q) => acc + (Number(q.marks) || 0), 0);
+
+        if (targetPartTotal > 0 && partQuestionSum !== targetPartTotal) {
+          if (partQuestionSum < targetPartTotal) {
+            setError(`Part ${i + 1} ("${p.title || `Part ${i + 1}`}") total question marks (${partQuestionSum} pts) is less than configured total marks (${targetPartTotal} pts).`);
+          } else {
+            setError(`Part ${i + 1} ("${p.title || `Part ${i + 1}`}") total question marks (${partQuestionSum} pts) exceeds configured total marks (${targetPartTotal} pts).`);
+          }
           return;
         }
       }
 
-      const targetPartTotal = parts.length === 1
-        ? (Number(formData.totalMarks) || 0)
-        : (Number(p.partTotalMarks) || 0);
-
-      const partQuestionSum = qList.reduce((acc, q) => acc + (Number(q.marks) || 0), 0);
-
-      if (targetPartTotal > 0 && partQuestionSum !== targetPartTotal) {
-        if (partQuestionSum < targetPartTotal) {
-          setError(`Part ${i + 1} ("${p.title || `Part ${i + 1}`}") total question marks (${partQuestionSum} pts) is less than configured total marks (${targetPartTotal} pts).`);
-        } else {
-          setError(`Part ${i + 1} ("${p.title || `Part ${i + 1}`}") total question marks (${partQuestionSum} pts) exceeds configured total marks (${targetPartTotal} pts).`);
-        }
+      if (totalQuestions === 0) {
+        setError('Please add at least one question to your activity.');
         return;
       }
     }
 
-    if (totalQuestions === 0) {
-      setError('Please add at least one question to your activity.');
-      return;
-    }
-
     onNext();
   };
+
+  const handleConfirmResetAndBack = () => {
+    setShowCancelQuestionsModal(false);
+    if (partMode === 'sections') {
+      const resetSections = sections.map((sec) => ({
+        ...sec,
+        parts: (sec.parts || []).map((p) => ({ ...p, questions: [] }))
+      }));
+      updateFormData({ sections: resetSections });
+    } else {
+      const resetParts = parts.map((p) => ({ ...p, questions: [] }));
+      updateFormData({ parts: resetParts });
+    }
+    if (onBack) onBack();
+  };
+
+  // Determine active section/part for modal badges
+  const activeModalSection = (partMode === 'sections' && editingSecIdx !== null && editingSecIdx !== undefined)
+    ? sections[editingSecIdx]
+    : (typeSelectorTarget?.secIdx !== null && typeSelectorTarget?.secIdx !== undefined ? sections[typeSelectorTarget.secIdx] : null);
+
+  const activeModalPart = activeModalSection
+    ? (activeModalSection.parts?.[editingPartIndex] || activeModalSection.parts?.[typeSelectorTarget?.partIndex])
+    : parts[editingPartIndex || typeSelectorTarget?.partIndex || 0];
 
   return (
     <div className="wizard-step-container fade-in">
       <div className="wizard-step-header">
         <h2 className="wizard-step-title">Question Creation &amp; Setup</h2>
         <p className="wizard-step-subtitle">
-          Add and manage questions for each part of your activity.
+          {partMode === 'sections'
+            ? 'Add and configure independent questions for each Section and Part.'
+            : 'Add and manage questions for each part of your activity.'}
         </p>
       </div>
 
@@ -319,151 +501,326 @@ export default function Step3QuestionsSetup({
         </div>
       )}
 
-      {/* PARTS & QUESTIONS LIST WORKSPACE */}
-      <div className="parts-questions-workspace">
-        {parts.map((part, pIdx) => {
-          const qList = part.questions || [];
-          const qCount = qList.length;
+      {/* SECTIONS MODE: RENDER SECTIONS SEQUENTIALLY ONE BY ONE */}
+      {partMode === 'sections' ? (
+        <div className="all-sections-questions-container">
+          {sections.map((sec, sIdx) => {
+            const secParts = sec.parts || [];
+            const totalSecQuestions = secParts.reduce((acc, p) => acc + (p.questions?.length || 0), 0);
 
-          return (
-            <div key={part.id || pIdx} className="part-questions-box mb-6">
-              {/* PART HEADER ROW */}
-              <div className="part-header-card">
-                <div className="part-header-left">
-                  <h3 className="part-name-text">
-                    {part.title || `Part ${pIdx + 1}`}
-                    <span className="part-q-count"> ({getQuestionCountText(qCount)})</span>
-                  </h3>
-                </div>
-                <div className="part-header-right-container">
-                  <button
-                    type="button"
-                    className="add-question-header-title-btn"
-                    onClick={() => openTypeSelector(pIdx)}
-                  >
-                    + Add Question
-                  </button>
-                  <div className="quick-question-type-buttons">
-                    <button
-                      type="button"
-                      className="btn btn-type-quick mcq"
-                      onClick={() => openEditor(pIdx, 'mcq')}
-                    >
-                      + MCQ
-                    </button>
-                    <button
-                      type="button"
-                      className="btn btn-type-quick written"
-                      onClick={() => openEditor(pIdx, 'written')}
-                    >
-                      + Written
-                    </button>
-                    <button
-                      type="button"
-                      className="btn btn-type-quick upload-icon"
-                      onClick={() => openEditor(pIdx, 'upload_paper')}
-                      title="Upload IMG/PDF Question Paper"
-                    >
-                      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
-                        <polyline points="17 8 12 3 7 8"/>
-                        <line x1="12" y1="3" x2="12" y2="15"/>
-                      </svg>
-                      <span>+ Upload IMG/PDF</span>
-                    </button>
+            return (
+              <div key={sec.id || sIdx} className="section-questions-block mb-8 p-5 border rounded-lg bg-white shadow-sm">
+                <div className="section-block-header flex-between align-center pb-3 mb-4 border-bottom">
+                  <div>
+                    <span className="text-xs uppercase font-bold text-primary tracking-wider block">
+                      SECTION {sIdx + 1}
+                    </span>
+                    <h3 className="section-block-title font-bold text-dark text-xl m-0">
+                      {sec.name || `Section ${sIdx + 1}`}
+                    </h3>
                   </div>
+                  <span className="badge badge-info text-xs font-semibold px-3 py-1 bg-light text-primary border rounded-full">
+                    {secParts.length} {secParts.length === 1 ? 'Part' : 'Parts'} • {totalSecQuestions} {totalSecQuestions === 1 ? 'Question' : 'Questions'}
+                  </span>
                 </div>
-              </div>
 
-              {/* QUESTION CARDS LIST FOR THIS PART */}
-              <div className="part-questions-body">
-                {qCount === 0 ? (
-                  <div className="empty-questions-card">
-                    <p>No questions added yet.</p>
-                  </div>
-                ) : (
-                  <div className="questions-card-grid">
-                    {qList.map((q, qIdx) => (
-                      <div key={q.id || qIdx} className="question-display-card">
-                        <div className="q-card-main-content">
-                          <div className="q-card-title-row">
-                            <span className="q-number-label">Q{qIdx + 1}</span>
-                            <span className={`q-type-badge-styled ${q.type}`}>
-                              {q.type === 'mcq' ? '[MCQ]' : q.type === 'written' ? '[Written]' : '[Uploaded]'}
-                            </span>
+                {/* Parts within this Section */}
+                <div className="parts-questions-workspace">
+                  {secParts.map((part, pIdx) => {
+                    const qList = part.questions || [];
+                    const qCount = qList.length;
+
+                    return (
+                      <div key={part.id || pIdx} className="part-questions-box mb-5">
+                        {/* PART HEADER ROW */}
+                        <div className="part-header-card">
+                          <div className="part-header-left">
+                            <h4 className="part-name-text">
+                              <span className="sec-prefix-badge mr-2">[{sec.name || `Section ${sIdx + 1}`}]</span>
+                              {part.title || `Part ${pIdx + 1}`}
+                              <span className="part-q-count"> ({getQuestionCountText(qCount)})</span>
+                            </h4>
                           </div>
-
-                          <div className="q-card-text-body mt-1">
-                            <p className="q-text-prompt">
-                              {q.type === 'upload_paper'
-                                ? (q.paperFileName ? `Question Paper: ${q.paperFileName}` : 'Question Paper file')
-                                : q.questionText}
-                            </p>
-                          </div>
-
-                          <div className="q-card-meta-row mt-2">
-                            <span className="q-marks-label">
-                              Marks: <strong>{q.marks !== null && q.marks !== undefined && q.marks !== '' ? q.marks : '0'}</strong>
-                            </span>
-                          </div>
-                        </div>
-
-                        {/* EDIT / DELETE ACTIONS ON RIGHT SIDE */}
-                        <div className="q-card-actions-right">
-                          {qList.length > 1 && (
-                            <div className="q-reorder-btns">
+                          <div className="part-header-right-container">
+                            <button
+                              type="button"
+                              className="add-question-header-title-btn"
+                              onClick={() => openTypeSelector(pIdx, sIdx)}
+                            >
+                              + Add Question
+                            </button>
+                            <div className="quick-question-type-buttons">
                               <button
                                 type="button"
-                                className="btn-reorder"
-                                onClick={() => handleReorderQuestion(pIdx, qIdx, 'up')}
-                                disabled={qIdx === 0}
-                                title="Move Up"
+                                className="btn btn-type-quick mcq"
+                                onClick={() => openEditor(pIdx, 'mcq', null, null, sIdx)}
                               >
-                                ▲
+                                + MCQ
                               </button>
                               <button
                                 type="button"
-                                className="btn-reorder"
-                                onClick={() => handleReorderQuestion(pIdx, qIdx, 'down')}
-                                disabled={qIdx === qList.length - 1}
-                                title="Move Down"
+                                className="btn btn-type-quick written"
+                                onClick={() => openEditor(pIdx, 'written', null, null, sIdx)}
                               >
-                                ▼
+                                + Written
+                              </button>
+                              <button
+                                type="button"
+                                className="btn btn-type-quick upload-icon"
+                                onClick={() => openEditor(pIdx, 'upload_paper', null, null, sIdx)}
+                                title="Upload IMG/PDF Question Paper"
+                              >
+                                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                                  <polyline points="17 8 12 3 7 8"/>
+                                  <line x1="12" y1="3" x2="12" y2="15"/>
+                                </svg>
+                                <span>+ Upload IMG/PDF</span>
                               </button>
                             </div>
+                          </div>
+                        </div>
+
+                        {/* QUESTION CARDS LIST FOR THIS PART */}
+                        <div className="part-questions-body">
+                          {qCount === 0 ? (
+                            <div className="empty-questions-card">
+                              <p>No questions added yet to this part.</p>
+                            </div>
+                          ) : (
+                            <div className="questions-card-grid">
+                              {qList.map((q, qIdx) => (
+                                <div key={q.id || qIdx} className="question-display-card">
+                                  <div className="q-card-main-content">
+                                    <div className="q-card-title-row">
+                                      <span className="q-number-label">Q{qIdx + 1}</span>
+                                      <span className={`q-type-badge-styled ${q.type}`}>
+                                        {q.type === 'mcq' ? '[MCQ]' : q.type === 'written' ? '[Written]' : '[Uploaded]'}
+                                      </span>
+                                    </div>
+
+                                    <div className="q-card-text-body mt-1">
+                                      <p className="q-text-prompt">
+                                        {q.type === 'upload_paper'
+                                          ? (q.paperFileName ? `Question Paper: ${q.paperFileName}` : 'Question Paper file')
+                                          : q.questionText}
+                                      </p>
+                                    </div>
+
+                                    <div className="q-card-meta-row mt-2">
+                                      <span className="q-marks-label">
+                                        Marks: <strong>{q.marks !== null && q.marks !== undefined && q.marks !== '' ? q.marks : '0'}</strong>
+                                      </span>
+                                    </div>
+                                  </div>
+
+                                  {/* EDIT / DELETE ACTIONS ON RIGHT SIDE */}
+                                  <div className="q-card-actions-right">
+                                    {qList.length > 1 && (
+                                      <div className="q-reorder-btns">
+                                        <button
+                                          type="button"
+                                          className="btn-reorder"
+                                          onClick={() => handleReorderQuestion(pIdx, qIdx, 'up', sIdx)}
+                                          disabled={qIdx === 0}
+                                          title="Move Up"
+                                        >
+                                          ▲
+                                        </button>
+                                        <button
+                                          type="button"
+                                          className="btn-reorder"
+                                          onClick={() => handleReorderQuestion(pIdx, qIdx, 'down', sIdx)}
+                                          disabled={qIdx === qList.length - 1}
+                                          title="Move Down"
+                                        >
+                                          ▼
+                                        </button>
+                                      </div>
+                                    )}
+                                    <button
+                                      type="button"
+                                      className="btn-q-action edit"
+                                      onClick={() => openEditor(pIdx, q.type, q, qIdx, sIdx)}
+                                      title="Edit Question"
+                                    >
+                                      ✏️ Edit
+                                    </button>
+                                    <button
+                                      type="button"
+                                      className="btn-q-action delete"
+                                      onClick={() => setDeletingTarget({ secIdx: sIdx, partIndex: pIdx, qIdx, question: q })}
+                                      title="Delete Question"
+                                    >
+                                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="15" height="15" style={{ marginRight: '4px' }}>
+                                        <polyline points="3 6 5 6 21 6"/>
+                                        <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
+                                        <line x1="10" y1="11" x2="10" y2="17"/>
+                                        <line x1="14" y1="11" x2="14" y2="17"/>
+                                      </svg>
+                                      <span>Delete</span>
+                                    </button>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
                           )}
-                          <button
-                            type="button"
-                            className="btn-q-action edit"
-                            onClick={() => openEditor(pIdx, q.type, q, qIdx)}
-                            title="Edit Question"
-                          >
-                            ✏️ Edit
-                          </button>
-                          <button
-                            type="button"
-                            className="btn-q-action delete"
-                            onClick={() => setDeletingTarget({ partIndex: pIdx, qIdx, question: q })}
-                            title="Delete Question"
-                          >
-                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="15" height="15" style={{ marginRight: '4px' }}>
-                              <polyline points="3 6 5 6 21 6"/>
-                              <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
-                              <line x1="10" y1="11" x2="10" y2="17"/>
-                              <line x1="14" y1="11" x2="14" y2="17"/>
-                            </svg>
-                            <span>Delete</span>
-                          </button>
                         </div>
                       </div>
-                    ))}
-                  </div>
-                )}
+                    );
+                  })}
+                </div>
               </div>
-            </div>
-          );
-        })}
-      </div>
+            );
+          })}
+        </div>
+      ) : (
+        /* NORMAL PARTS MODE */
+        <div className="parts-questions-workspace">
+          {parts.map((part, pIdx) => {
+            const qList = part.questions || [];
+            const qCount = qList.length;
+
+            return (
+              <div key={part.id || pIdx} className="part-questions-box mb-6">
+                {/* PART HEADER ROW */}
+                <div className="part-header-card">
+                  <div className="part-header-left">
+                    <h3 className="part-name-text">
+                      {part.title || `Part ${pIdx + 1}`}
+                      <span className="part-q-count"> ({getQuestionCountText(qCount)})</span>
+                    </h3>
+                  </div>
+                  <div className="part-header-right-container">
+                    <button
+                      type="button"
+                      className="add-question-header-title-btn"
+                      onClick={() => openTypeSelector(pIdx)}
+                    >
+                      + Add Question
+                    </button>
+                    <div className="quick-question-type-buttons">
+                      <button
+                        type="button"
+                        className="btn btn-type-quick mcq"
+                        onClick={() => openEditor(pIdx, 'mcq')}
+                      >
+                        + MCQ
+                      </button>
+                      <button
+                        type="button"
+                        className="btn btn-type-quick written"
+                        onClick={() => openEditor(pIdx, 'written')}
+                      >
+                        + Written
+                      </button>
+                      <button
+                        type="button"
+                        className="btn btn-type-quick upload-icon"
+                        onClick={() => openEditor(pIdx, 'upload_paper')}
+                        title="Upload IMG/PDF Question Paper"
+                      >
+                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                          <polyline points="17 8 12 3 7 8"/>
+                          <line x1="12" y1="3" x2="12" y2="15"/>
+                        </svg>
+                        <span>+ Upload IMG/PDF</span>
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                {/* QUESTION CARDS LIST FOR THIS PART */}
+                <div className="part-questions-body">
+                  {qCount === 0 ? (
+                    <div className="empty-questions-card">
+                      <p>No questions added yet to this part.</p>
+                    </div>
+                  ) : (
+                    <div className="questions-card-grid">
+                      {qList.map((q, qIdx) => (
+                        <div key={q.id || qIdx} className="question-display-card">
+                          <div className="q-card-main-content">
+                            <div className="q-card-title-row">
+                              <span className="q-number-label">Q{qIdx + 1}</span>
+                              <span className={`q-type-badge-styled ${q.type}`}>
+                                {q.type === 'mcq' ? '[MCQ]' : q.type === 'written' ? '[Written]' : '[Uploaded]'}
+                              </span>
+                            </div>
+
+                            <div className="q-card-text-body mt-1">
+                              <p className="q-text-prompt">
+                                {q.type === 'upload_paper'
+                                  ? (q.paperFileName ? `Question Paper: ${q.paperFileName}` : 'Question Paper file')
+                                  : q.questionText}
+                              </p>
+                            </div>
+
+                            <div className="q-card-meta-row mt-2">
+                              <span className="q-marks-label">
+                                Marks: <strong>{q.marks !== null && q.marks !== undefined && q.marks !== '' ? q.marks : '0'}</strong>
+                              </span>
+                            </div>
+                          </div>
+
+                          {/* EDIT / DELETE ACTIONS ON RIGHT SIDE */}
+                          <div className="q-card-actions-right">
+                            {qList.length > 1 && (
+                              <div className="q-reorder-btns">
+                                <button
+                                  type="button"
+                                  className="btn-reorder"
+                                  onClick={() => handleReorderQuestion(pIdx, qIdx, 'up')}
+                                  disabled={qIdx === 0}
+                                  title="Move Up"
+                                >
+                                  ▲
+                                </button>
+                                <button
+                                  type="button"
+                                  className="btn-reorder"
+                                  onClick={() => handleReorderQuestion(pIdx, qIdx, 'down')}
+                                  disabled={qIdx === qList.length - 1}
+                                  title="Move Down"
+                                >
+                                  ▼
+                                </button>
+                              </div>
+                            )}
+                            <button
+                              type="button"
+                              className="btn-q-action edit"
+                              onClick={() => openEditor(pIdx, q.type, q, qIdx)}
+                              title="Edit Question"
+                            >
+                              ✏️ Edit
+                            </button>
+                            <button
+                              type="button"
+                              className="btn-q-action delete"
+                              onClick={() => setDeletingTarget({ secIdx: undefined, partIndex: pIdx, qIdx, question: q })}
+                              title="Delete Question"
+                            >
+                              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="15" height="15" style={{ marginRight: '4px' }}>
+                                <polyline points="3 6 5 6 21 6"/>
+                                <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
+                                <line x1="10" y1="11" x2="10" y2="17"/>
+                                <line x1="14" y1="11" x2="14" y2="17"/>
+                              </svg>
+                              <span>Delete</span>
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
 
       {/* Confirmation Modal when clicking Cancel on Question Setup */}
       {showCancelQuestionsModal && (
@@ -492,13 +849,7 @@ export default function Step3QuestionsSetup({
               <button
                 type="button"
                 className="btn btn-danger btn-sm"
-                onClick={() => {
-                  setShowCancelQuestionsModal(false);
-                  // Reset all questions in parts
-                  const resetParts = parts.map((p) => ({ ...p, questions: [] }));
-                  updateFormData({ parts: resetParts });
-                  if (onBack) onBack();
-                }}
+                onClick={handleConfirmResetAndBack}
               >
                 Yes, Delete All Questions & Go Back
               </button>
@@ -528,18 +879,24 @@ export default function Step3QuestionsSetup({
       </div>
 
       {/* MODAL 1: QUESTION TYPE SELECTION */}
-      {typeSelectorPartIndex !== null && (
-        <div className="modal-backdrop" onClick={() => setTypeSelectorPartIndex(null)}>
+      {typeSelectorTarget !== null && (
+        <div className="modal-backdrop" onClick={() => setTypeSelectorTarget(null)}>
           <div className="modal-card type-selection-modal" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header flex-between">
-              <h3 className="modal-title">Add Question</h3>
-              <button className="modal-close-btn" onClick={() => setTypeSelectorPartIndex(null)}>&times;</button>
+              <div>
+                <span className="badge badge-primary">
+                  {activeModalSection ? `Section: ${activeModalSection.name || 'Section'} • ` : ''}
+                  {activeModalPart?.title || `Part ${(typeSelectorTarget.partIndex || 0) + 1}`}
+                </span>
+                <h3 className="modal-title mt-1">Add Question</h3>
+              </div>
+              <button className="modal-close-btn" onClick={() => setTypeSelectorTarget(null)}>&times;</button>
             </div>
             <div className="type-options-grid mt-4">
               <button
                 type="button"
                 className="type-select-card"
-                onClick={() => openEditor(typeSelectorPartIndex, 'mcq')}
+                onClick={() => openEditor(typeSelectorTarget.partIndex, 'mcq', null, null, typeSelectorTarget.secIdx)}
               >
                 <div className="type-icon-box mcq-bg">+</div>
                 <div className="type-details">
@@ -551,7 +908,7 @@ export default function Step3QuestionsSetup({
               <button
                 type="button"
                 className="type-select-card"
-                onClick={() => openEditor(typeSelectorPartIndex, 'written')}
+                onClick={() => openEditor(typeSelectorTarget.partIndex, 'written', null, null, typeSelectorTarget.secIdx)}
               >
                 <div className="type-icon-box written-bg">+</div>
                 <div className="type-details">
@@ -563,7 +920,7 @@ export default function Step3QuestionsSetup({
               <button
                 type="button"
                 className="type-select-card"
-                onClick={() => openEditor(typeSelectorPartIndex, 'upload_paper')}
+                onClick={() => openEditor(typeSelectorTarget.partIndex, 'upload_paper', null, null, typeSelectorTarget.secIdx)}
               >
                 <div className="type-icon-box paper-bg">+</div>
                 <div className="type-details">
@@ -581,9 +938,10 @@ export default function Step3QuestionsSetup({
         <MCQEditorPage
           activityId={activityId}
           formData={formData}
-          part={parts[editingPartIndex]}
+          sectionName={activeModalSection?.name}
+          part={activeModalPart}
           partIndex={editingPartIndex}
-          questionToEdit={editingQuestionIndex !== null ? parts[editingPartIndex]?.questions?.[editingQuestionIndex] : null}
+          questionToEdit={editingQuestionIndex !== null ? activeModalPart?.questions?.[editingQuestionIndex] : null}
           editingQuestionIndex={editingQuestionIndex}
           onSaveQuestion={handleSaveMCQQuestion}
           onCancel={resetQuestionForm}
@@ -597,7 +955,8 @@ export default function Step3QuestionsSetup({
             <div className="modal-header flex-between">
               <div>
                 <span className="badge badge-primary">
-                  {parts[editingPartIndex]?.title || `Part ${editingPartIndex + 1}`}
+                  {activeModalSection ? `${activeModalSection.name || 'Section'} • ` : ''}
+                  {activeModalPart?.title || `Part ${editingPartIndex + 1}`}
                 </span>
                 <h3 className="modal-title mt-1">
                   {editingQuestionIndex !== null ? 'Edit Question' : 'Add New Question'} (
@@ -609,7 +968,6 @@ export default function Step3QuestionsSetup({
             </div>
 
             <div className="modal-body-scroll mt-3">
-
               {/* WRITTEN EDITOR */}
               {editorMode === 'written' && (
                 <div className="written-editor">
@@ -790,3 +1148,5 @@ export default function Step3QuestionsSetup({
     </div>
   );
 }
+
+

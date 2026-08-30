@@ -63,10 +63,28 @@ export default function Step5FinalizeShare({ activityId, shareUrl, activityData,
           <span className="pill-label">Type</span>
           <span className="pill-val">{activityData?.purpose}</span>
         </div>
-        <div className="summary-pill">
-          <span className="pill-label">Parts</span>
-          <span className="pill-val">{(activityData?.parts || []).length}</span>
-        </div>
+        {activityData?.partMode === 'sections' ? (
+          <>
+            <div className="summary-pill">
+              <span className="pill-label">Sections</span>
+              <span className="pill-val">{(activityData?.sections || []).length}</span>
+            </div>
+            <div className="summary-pill">
+              <span className="pill-label">Total Parts</span>
+              <span className="pill-val">
+                {(activityData?.sections || []).reduce(
+                  (acc, s) => acc + (s.parts?.length || 0),
+                  0
+                )}
+              </span>
+            </div>
+          </>
+        ) : (
+          <div className="summary-pill">
+            <span className="pill-label">Parts</span>
+            <span className="pill-val">{(activityData?.parts || []).length}</span>
+          </div>
+        )}
       </div>
 
       {/* Share Card */}

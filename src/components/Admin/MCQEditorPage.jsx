@@ -4,6 +4,7 @@ import { uploadActivityFile } from '../../services/activityService';
 export default function MCQEditorPage({
   activityId,
   formData,
+  sectionName,
   part,
   partIndex,
   questionToEdit,
@@ -360,8 +361,13 @@ export default function MCQEditorPage({
           </button>
 
           <div className="mcq-header-meta-group" style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
-            <div className="mcq-badge-row mb-1" style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
+            <div className="mcq-badge-row mb-1" style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px', flexWrap: 'wrap' }}>
               <span className="badge-mcq-type">MCQ</span>
+              {sectionName && (
+                <span className="badge-part-name" style={{ background: '#e0e7ff', color: '#3730a3', borderColor: '#c7d2fe' }}>
+                  Section: {sectionName}
+                </span>
+              )}
               <span className="badge-part-name">Part: {partTitle}</span>
             </div>
             <h1 className="mcq-page-title" style={{ margin: 0, padding: 0, lineHeight: '1.2' }}>
