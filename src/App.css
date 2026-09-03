@@ -2567,7 +2567,7 @@ input[type="number"] {
   box-sizing: border-box;
 }
 
-@media (max-width: 640px) {
+@media (max-width: 768px) {
   .main-schedule-row {
     grid-template-columns: 1fr !important;
     gap: 14px !important;
@@ -2604,7 +2604,7 @@ input[type="number"] {
   margin-bottom: 18px;
 }
 
-@media (max-width: 640px) {
+@media (max-width: 768px) {
   .form-grid-2, .form-grid-3 {
     grid-template-columns: 1fr;
     gap: 16px;
@@ -2864,6 +2864,13 @@ input[type="number"] {
   gap: 12px;
   width: 100%;
   box-sizing: border-box;
+}
+
+@media (max-width: 768px) {
+  .part-inline-time-container {
+    grid-template-columns: 1fr !important;
+    gap: 10px !important;
+  }
 }
 
 .part-time-field {
@@ -6982,7 +6989,7 @@ img, video, canvas, svg {
   box-sizing: border-box !important;
 }
 
-@media (max-width: 640px) {
+@media (max-width: 768px) {
   .part-fields-responsive-grid {
     grid-template-columns: 1fr;
     gap: 12px;
