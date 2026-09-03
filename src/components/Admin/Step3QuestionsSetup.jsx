@@ -1,6 +1,8 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { uploadActivityFile } from '../../services/activityService';
 import MCQEditorPage from './MCQEditorPage';
+import WrittenEditorPage from './WrittenEditorPage';
+import UploadEditorPage from './UploadEditorPage';
 
 export default function Step3QuestionsSetup({
   activityId,
@@ -8,6 +10,7 @@ export default function Step3QuestionsSetup({
   updateFormData,
   onNext,
   onBack,
+  onResetQuestions,
   saving
 }) {
   const partMode = formData.partMode || 'parts'; // 'parts' | 'sections'
@@ -25,14 +28,14 @@ export default function Step3QuestionsSetup({
   const [editingPartIndex, setEditingPartIndex] = useState(0);
   const [editingQuestionIndex, setEditingQuestionIndex] = useState(null);
   const [deletingTarget, setDeletingTarget] = useState(null); // { secIdx, partIndex, qIdx, question }
-  const [showCancelQuestionsModal, setShowCancelQuestionsModal] = useState(false);
+  const [showCancelModal, setShowCancelModal] = useState(false);
 
   const [error, setError] = useState('');
   const [fileUploading, setFileUploading] = useState(false);
 
   // Form states for active question editor
   const [questionText, setQuestionText] = useState('');
-  const [marks, setMarks] = useState(formData.purpose === 'Exam' ? '1' : '');
+  const [marks, setMarks] = useState('');
   const [description, setDescription] = useState('');
 
   // Image & File attachment states
@@ -46,7 +49,7 @@ export default function Step3QuestionsSetup({
 
   const resetQuestionForm = () => {
     setQuestionText('');
-    setMarks(isExam ? '1' : '');
+    setMarks('');
     setDescription('');
     setQuestionImageFile(null);
     setQuestionImageUrl('');
@@ -56,6 +59,27 @@ export default function Step3QuestionsSetup({
     setEditingQuestionIndex(null);
     setEditorMode(null);
     setError('');
+  };
+
+  // Sync sub-editor mode with browser history (Android Back inside editor returns to questions list)
+  useEffect(() => {
+    const handlePopState = (event) => {
+      const state = event.state;
+      if (editorMode && (!state || !state.subEditor)) {
+        resetQuestionForm();
+      }
+    };
+
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, [editorMode]);
+
+  const handleEditorCancel = () => {
+    if (window.history.state?.subEditor) {
+      window.history.back();
+    } else {
+      resetQuestionForm();
+    }
   };
 
   const openTypeSelector = (pIdx, sIdx = null) => {
@@ -79,6 +103,9 @@ export default function Step3QuestionsSetup({
       setPaperFileUrl(questionToEdit.paperFileUrl || '');
       setPaperFileName(questionToEdit.paperFileName || '');
     }
+
+    // Push history state so Android Back returns from sub-editor to questions list
+    window.history.pushState({ wizardStep: 2, subEditor: type, wizardOpen: true }, '', window.location.href);
   };
 
   const handlePaperFileChange = (e) => {
@@ -270,7 +297,11 @@ export default function Step3QuestionsSetup({
     if (addMore) {
       setEditingQuestionIndex(null);
     } else {
-      resetQuestionForm();
+      if (window.history.state?.subEditor) {
+        window.history.back();
+      } else {
+        resetQuestionForm();
+      }
     }
   };
 
@@ -455,19 +486,13 @@ export default function Step3QuestionsSetup({
     onNext();
   };
 
-  const handleConfirmResetAndBack = () => {
-    setShowCancelQuestionsModal(false);
-    if (partMode === 'sections') {
-      const resetSections = sections.map((sec) => ({
-        ...sec,
-        parts: (sec.parts || []).map((p) => ({ ...p, questions: [] }))
-      }));
-      updateFormData({ sections: resetSections });
-    } else {
-      const resetParts = parts.map((p) => ({ ...p, questions: [] }));
-      updateFormData({ parts: resetParts });
+  const handleConfirmCancel = () => {
+    setShowCancelModal(false);
+    if (onResetQuestions) {
+      onResetQuestions();
+    } else if (onBack) {
+      onBack();
     }
-    if (onBack) onBack();
   };
 
   // Determine active section/part for modal badges
@@ -567,15 +592,16 @@ export default function Step3QuestionsSetup({
                               <button
                                 type="button"
                                 className="btn btn-type-quick upload-icon"
-                                onClick={() => openEditor(pIdx, 'upload_paper', null, null, sIdx)}
-                                title="Upload IMG/PDF Question Paper"
+                                onClick={() => openEditor(pIdx, 'upload', null, null, sIdx)}
+                                title="Upload Image/PDF Question"
+                                aria-label="Upload Image/PDF Question"
                               >
                                 <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                                   <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
                                   <polyline points="17 8 12 3 7 8"/>
                                   <line x1="12" y1="3" x2="12" y2="15"/>
                                 </svg>
-                                <span>+ Upload IMG/PDF</span>
+                                <span>+ Upload</span>
                               </button>
                             </div>
                           </div>
@@ -595,14 +621,16 @@ export default function Step3QuestionsSetup({
                                     <div className="q-card-title-row">
                                       <span className="q-number-label">Q{qIdx + 1}</span>
                                       <span className={`q-type-badge-styled ${q.type}`}>
-                                        {q.type === 'mcq' ? '[MCQ]' : q.type === 'written' ? '[Written]' : '[Uploaded]'}
+                                        {q.type === 'mcq' ? '[MCQ]' : q.type === 'written' ? '[Written]' : '[UPLOAD]'}
                                       </span>
                                     </div>
 
                                     <div className="q-card-text-body mt-1">
                                       <p className="q-text-prompt">
-                                        {q.type === 'upload_paper'
-                                          ? (q.paperFileName ? `Question Paper: ${q.paperFileName}` : 'Question Paper file')
+                                        {(q.type === 'upload' || q.type === 'upload_paper')
+                                          ? (q.attachedFiles?.length
+                                              ? `Uploaded: ${q.attachedFiles.map((f) => f.name).join(', ')}`
+                                              : (q.fileName || q.paperFileName ? `Uploaded: ${q.fileName || q.paperFileName}` : 'Uploaded Image/PDF file(s)'))
                                           : q.questionText}
                                       </p>
                                     </div>
@@ -717,15 +745,16 @@ export default function Step3QuestionsSetup({
                       <button
                         type="button"
                         className="btn btn-type-quick upload-icon"
-                        onClick={() => openEditor(pIdx, 'upload_paper')}
-                        title="Upload IMG/PDF Question Paper"
+                        onClick={() => openEditor(pIdx, 'upload')}
+                        title="Upload Image/PDF Question"
+                        aria-label="Upload Image/PDF Question"
                       >
                         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                           <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
                           <polyline points="17 8 12 3 7 8"/>
                           <line x1="12" y1="3" x2="12" y2="15"/>
                         </svg>
-                        <span>+ Upload IMG/PDF</span>
+                        <span>+ Upload</span>
                       </button>
                     </div>
                   </div>
@@ -745,14 +774,16 @@ export default function Step3QuestionsSetup({
                             <div className="q-card-title-row">
                               <span className="q-number-label">Q{qIdx + 1}</span>
                               <span className={`q-type-badge-styled ${q.type}`}>
-                                {q.type === 'mcq' ? '[MCQ]' : q.type === 'written' ? '[Written]' : '[Uploaded]'}
+                                {q.type === 'mcq' ? '[MCQ]' : q.type === 'written' ? '[Written]' : '[UPLOAD]'}
                               </span>
                             </div>
 
                             <div className="q-card-text-body mt-1">
                               <p className="q-text-prompt">
-                                {q.type === 'upload_paper'
-                                  ? (q.paperFileName ? `Question Paper: ${q.paperFileName}` : 'Question Paper file')
+                                {(q.type === 'upload' || q.type === 'upload_paper')
+                                  ? (q.attachedFiles?.length
+                                      ? `Uploaded: ${q.attachedFiles.map((f) => f.name).join(', ')}`
+                                      : (q.fileName || q.paperFileName ? `Uploaded: ${q.fileName || q.paperFileName}` : 'Uploaded Image/PDF file(s)'))
                                   : q.questionText}
                               </p>
                             </div>
@@ -822,36 +853,36 @@ export default function Step3QuestionsSetup({
         </div>
       )}
 
-      {/* Confirmation Modal when clicking Cancel on Question Setup */}
-      {showCancelQuestionsModal && (
-        <div className="modal-backdrop" onClick={() => setShowCancelQuestionsModal(false)}>
+      {/* Cancel Questions Confirmation Dialog Modal */}
+      {showCancelModal && (
+        <div className="modal-backdrop" onClick={() => setShowCancelModal(false)}>
           <div className="modal-card small-modal" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header-bar flex-between">
-              <h4 className="modal-title-text text-danger font-bold">⚠️ Confirm Reset & Cancel Questions</h4>
-              <button type="button" className="modal-close-btn" onClick={() => setShowCancelQuestionsModal(false)}>×</button>
+              <h4 className="modal-title-text text-danger font-bold">⚠️ Confirm Cancel & Reset</h4>
+              <button type="button" className="modal-close-btn" onClick={() => setShowCancelModal(false)}>×</button>
             </div>
             <div className="modal-body-content py-3">
               <p className="text-sm font-semibold mb-2" style={{ color: '#0f172a' }}>
-                Are you sure you want to cancel and go back?
+                Are you sure you want to cancel?
               </p>
               <p className="text-xs text-muted">
-                Going back will <strong>reset and delete all configured questions</strong> for this activity. You will have to set up your questions again.
+                Canceling will <strong>delete and reset all configured questions, parts, and marks</strong> set for this activity and return you to Basic Info.
               </p>
             </div>
             <div className="modal-footer-bar flex-end gap-2 pt-3 border-top">
               <button
                 type="button"
                 className="btn btn-secondary btn-sm"
-                onClick={() => setShowCancelQuestionsModal(false)}
+                onClick={() => setShowCancelModal(false)}
               >
                 No, Stay Here
               </button>
               <button
                 type="button"
                 className="btn btn-danger btn-sm"
-                onClick={handleConfirmResetAndBack}
+                onClick={handleConfirmCancel}
               >
-                Yes, Delete All Questions & Go Back
+                Yes, Cancel & Reset Questions
               </button>
             </div>
           </div>
@@ -863,7 +894,7 @@ export default function Step3QuestionsSetup({
         <button
           type="button"
           className="btn btn-secondary"
-          onClick={() => setShowCancelQuestionsModal(true)}
+          onClick={() => setShowCancelModal(true)}
           disabled={saving}
         >
           Cancel
@@ -920,12 +951,12 @@ export default function Step3QuestionsSetup({
               <button
                 type="button"
                 className="type-select-card"
-                onClick={() => openEditor(typeSelectorTarget.partIndex, 'upload_paper', null, null, typeSelectorTarget.secIdx)}
+                onClick={() => openEditor(typeSelectorTarget.partIndex, 'upload', null, null, typeSelectorTarget.secIdx)}
               >
                 <div className="type-icon-box paper-bg">+</div>
                 <div className="type-details">
-                  <h4>+ Upload Question Paper</h4>
-                  <p>Attach PDF or Image file question paper</p>
+                  <h4>+ Upload</h4>
+                  <p>Upload one or more Image or PDF files</p>
                 </div>
               </button>
             </div>
@@ -944,171 +975,38 @@ export default function Step3QuestionsSetup({
           questionToEdit={editingQuestionIndex !== null ? activeModalPart?.questions?.[editingQuestionIndex] : null}
           editingQuestionIndex={editingQuestionIndex}
           onSaveQuestion={handleSaveMCQQuestion}
-          onCancel={resetQuestionForm}
+          onCancel={handleEditorCancel}
         />
       )}
 
-      {/* MODAL 2: QUESTION EDITOR FOR WRITTEN AND UPLOAD PAPER */}
-      {editorMode !== null && editorMode !== 'mcq' && (
-        <div className="modal-backdrop" onClick={resetQuestionForm}>
-          <div className="modal-card question-editor-modal" onClick={(e) => e.stopPropagation()}>
-            <div className="modal-header flex-between">
-              <div>
-                <span className="badge badge-primary">
-                  {activeModalSection ? `${activeModalSection.name || 'Section'} • ` : ''}
-                  {activeModalPart?.title || `Part ${editingPartIndex + 1}`}
-                </span>
-                <h3 className="modal-title mt-1">
-                  {editingQuestionIndex !== null ? 'Edit Question' : 'Add New Question'} (
-                  {editorMode === 'written' ? 'Written' : 'Question Paper'}
-                  )
-                </h3>
-              </div>
-              <button className="modal-close-btn" onClick={resetQuestionForm}>&times;</button>
-            </div>
+      {/* FULL-SCREEN WRITTEN EDITOR PAGE */}
+      {editorMode === 'written' && (
+        <WrittenEditorPage
+          activityId={activityId}
+          formData={formData}
+          sectionName={activeModalSection?.name}
+          part={activeModalPart}
+          partIndex={editingPartIndex}
+          questionToEdit={editingQuestionIndex !== null ? activeModalPart?.questions?.[editingQuestionIndex] : null}
+          editingQuestionIndex={editingQuestionIndex}
+          onSaveQuestion={handleSaveMCQQuestion}
+          onCancel={handleEditorCancel}
+        />
+      )}
 
-            <div className="modal-body-scroll mt-3">
-              {/* WRITTEN EDITOR */}
-              {editorMode === 'written' && (
-                <div className="written-editor">
-                  <div className="form-group">
-                    <label className="form-label" htmlFor="written-prompt">
-                      Question Text <span className="req-star">*</span>
-                    </label>
-                    <textarea
-                      id="written-prompt"
-                      className="form-input text-area"
-                      rows="3"
-                      placeholder="Enter question prompt..."
-                      value={questionText}
-                      onChange={(e) => setQuestionText(e.target.value)}
-                    />
-                  </div>
-
-                  <div className="form-grid-2">
-                    <div className="form-group">
-                      <label className="form-label">
-                        Question Image <span className="optional-tag">(Optional)</span>
-                      </label>
-                      <input
-                        type="file"
-                        accept="image/*"
-                        className="form-input file-input"
-                        onChange={handleQuestionImageChange}
-                      />
-                      {questionImageUrl && (
-                        <div className="image-preview-sm mt-2">
-                          <img src={questionImageUrl} alt="Attachment" />
-                        </div>
-                      )}
-                    </div>
-
-                    <div className="form-group">
-                      <label className="form-label" htmlFor="written-marks">
-                        Marks {isExam ? <span className="req-star">*</span> : <span className="optional-tag">(Optional)</span>}
-                      </label>
-                      <input
-                        type="number"
-                        id="written-marks"
-                        className="form-input num-input"
-                        min="1"
-                        step="0.5"
-                        value={marks}
-                        onChange={(e) => setMarks(e.target.value)}
-                        placeholder="e.g. 5"
-                      />
-                    </div>
-                  </div>
-
-                  <div className="form-group">
-                    <label className="form-label" htmlFor="written-desc">
-                      Description / Answer Guidelines <span className="optional-tag">(Optional)</span>
-                    </label>
-                    <textarea
-                      id="written-desc"
-                      className="form-input text-area"
-                      rows="2"
-                      placeholder="Add guidelines for students responding to this question..."
-                      value={description}
-                      onChange={(e) => setDescription(e.target.value)}
-                    />
-                  </div>
-                </div>
-              )}
-
-              {/* UPLOAD QUESTION PAPER EDITOR */}
-              {editorMode === 'upload_paper' && (
-                <div className="paper-upload-editor">
-                  <div className="form-group">
-                    <label className="form-label">
-                      Question Paper File (JPG, JPEG, PNG, or PDF) <span className="req-star">*</span>
-                    </label>
-                    <input
-                      type="file"
-                      accept=".jpg, .jpeg, .png, .pdf"
-                      className="form-input file-input"
-                      onChange={handlePaperFileChange}
-                    />
-                    <span className="file-hint block mt-1">Allowed: PDF, PNG, JPG (Max 15MB)</span>
-                    {paperFileName && <div className="selected-file-badge mt-2">Selected: {paperFileName}</div>}
-                  </div>
-
-                  <div className="form-group">
-                    <label className="form-label" htmlFor="instructions">
-                      Instructions / Description for Answer <span className="optional-tag">(Optional)</span>
-                    </label>
-                    <textarea
-                      id="instructions"
-                      className="form-input text-area"
-                      rows="3"
-                      placeholder="Enter instructions for students..."
-                      value={description}
-                      onChange={(e) => setDescription(e.target.value)}
-                    />
-                  </div>
-
-                  {isExam && (
-                    <div className="form-group">
-                      <label className="form-label" htmlFor="paper-marks">
-                        Total Marks for Paper <span className="req-star">*</span>
-                      </label>
-                      <input
-                        type="number"
-                        id="paper-marks"
-                        className="form-input num-input"
-                        min="1"
-                        value={marks}
-                        onChange={(e) => setMarks(e.target.value)}
-                        placeholder="e.g. 50"
-                      />
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
-
-            <div className="modal-actions flex-between mt-4">
-              <button type="button" className="btn btn-secondary" onClick={resetQuestionForm}>
-                Cancel
-              </button>
-              <button
-                type="button"
-                className="btn btn-primary"
-                onClick={handleSaveQuestion}
-                disabled={fileUploading}
-              >
-                {fileUploading ? (
-                  <div className="spinner-container">
-                    <div className="spinner"></div>
-                    <span>Uploading...</span>
-                  </div>
-                ) : (
-                  <span>{editingQuestionIndex !== null ? 'Save Changes' : 'Save Question'}</span>
-                )}
-              </button>
-            </div>
-          </div>
-        </div>
+      {/* FULL-SCREEN UPLOAD QUESTION EDITOR PAGE */}
+      {(editorMode === 'upload' || editorMode === 'upload_paper') && (
+        <UploadEditorPage
+          activityId={activityId}
+          formData={formData}
+          sectionName={activeModalSection?.name}
+          part={activeModalPart}
+          partIndex={editingPartIndex}
+          questionToEdit={editingQuestionIndex !== null ? activeModalPart?.questions?.[editingQuestionIndex] : null}
+          editingQuestionIndex={editingQuestionIndex}
+          onSaveQuestion={handleSaveMCQQuestion}
+          onCancel={handleEditorCancel}
+        />
       )}
 
       {/* MODAL 3: DELETE CONFIRMATION */}

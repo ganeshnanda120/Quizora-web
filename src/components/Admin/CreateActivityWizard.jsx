@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Step2BasicInfo from './Step2BasicInfo';
 import Step3QuestionsSetup from './Step3QuestionsSetup';
 import Step4ParticipantForm from './Step4ParticipantForm';
@@ -47,7 +47,7 @@ export default function CreateActivityWizard({ user, profileData, onClose, onAct
     negativeMarkValue: '0.25',
     showPercentageScore: true,
     participantForm: [
-      { id: 'field_name', label: 'Name', required: true, isDefault: true }
+      { id: 'field_name', label: 'Name', isOptional: false, required: true }
     ]
   });
 
@@ -55,11 +55,37 @@ export default function CreateActivityWizard({ user, profileData, onClose, onAct
     setFormData((prev) => ({ ...prev, ...updates }));
   };
 
+  // Sync state with browser history (Android Back button, swipe-back gesture, browser back/forward)
+  useEffect(() => {
+    // Push initial step 1 state when wizard opens
+    if (!window.history.state?.wizardOpen) {
+      window.history.pushState({ wizardStep: 1, wizardOpen: true }, '', window.location.href);
+    }
+
+    const handlePopState = (event) => {
+      const state = event.state;
+      if (state && state.wizardOpen) {
+        if (state.wizardStep) {
+          setCurrentStep(state.wizardStep);
+        }
+      } else {
+        // User backed out of the wizard to the dashboard
+        onClose();
+      }
+    };
+
+    window.addEventListener('popstate', handlePopState);
+    return () => {
+      window.removeEventListener('popstate', handlePopState);
+    };
+  }, [onClose]);
+
   // Step 1 (Basic Info) -> Step 2 (Questions): Save draft
   const handleStep1Next = async () => {
     setSaving(true);
     try {
       await saveActivityDraft(activityId, formData);
+      window.history.pushState({ wizardStep: 2, wizardOpen: true }, '', window.location.href);
       setCurrentStep(2);
     } catch (err) {
       console.error("Save draft error:", err);
@@ -73,6 +99,7 @@ export default function CreateActivityWizard({ user, profileData, onClose, onAct
     setSaving(true);
     try {
       await saveActivityDraft(activityId, formData);
+      window.history.pushState({ wizardStep: 3, wizardOpen: true }, '', window.location.href);
       setCurrentStep(3);
     } catch (err) {
       console.error("Save questions draft error:", err);
@@ -90,6 +117,7 @@ export default function CreateActivityWizard({ user, profileData, onClose, onAct
       if (onActivityCreated) {
         onActivityCreated(publishedPayload);
       }
+      window.history.pushState({ wizardStep: 4, wizardOpen: true }, '', window.location.href);
       setCurrentStep(4);
     } catch (err) {
       console.error("Publish activity error:", err);
@@ -98,8 +126,8 @@ export default function CreateActivityWizard({ user, profileData, onClose, onAct
     }
   };
 
-  // Reset all questions in all parts (and sections) and return to Questions Setup (Step 2)
-  const handleResetQuestionsAndBack = () => {
+  // Reset questions and return to Step 1 when Cancel is confirmed in Question Setup or Participant Form
+  const handleResetQuestionsAndGoToStep1 = () => {
     const resetParts = (formData.parts || []).map((p) => ({
       ...p,
       questions: []
@@ -112,7 +140,24 @@ export default function CreateActivityWizard({ user, profileData, onClose, onAct
       }))
     }));
     updateFormData({ parts: resetParts, sections: resetSections });
-    setCurrentStep(2);
+    
+    if (currentStep > 1 && window.history.state?.wizardOpen) {
+      window.history.go(-(currentStep - 1));
+    } else {
+      setCurrentStep(1);
+    }
+  };
+
+  const handleHeaderBack = () => {
+    if (window.history.state?.wizardOpen) {
+      window.history.back();
+    } else {
+      if (currentStep === 1) {
+        onClose();
+      } else {
+        setCurrentStep((prev) => prev - 1);
+      }
+    }
   };
 
   return (
@@ -124,22 +169,7 @@ export default function CreateActivityWizard({ user, profileData, onClose, onAct
             <button
               type="button"
               className="btn-back-circular"
-              onClick={() => {
-                if (currentStep === 1) {
-                  onClose();
-                } else if (currentStep === 2) {
-                  setCurrentStep(1);
-                } else if (currentStep === 3) {
-                  const confirmReset = window.confirm(
-                    "Are you sure you want to cancel and go back? Going back from Participant Form will reset and delete all configured questions for this activity."
-                  );
-                  if (confirmReset) {
-                    handleResetQuestionsAndBack();
-                  }
-                } else {
-                  setCurrentStep(currentStep - 1);
-                }
-              }}
+              onClick={handleHeaderBack}
               title={currentStep === 1 ? "Return to Admin Dashboard" : "Go to previous step"}
               aria-label="Back"
             >
@@ -214,6 +244,7 @@ export default function CreateActivityWizard({ user, profileData, onClose, onAct
               updateFormData={updateFormData}
               onNext={handleStep2Next}
               onBack={() => setCurrentStep(1)}
+              onResetQuestions={handleResetQuestionsAndGoToStep1}
               saving={saving}
             />
           )}
@@ -224,7 +255,7 @@ export default function CreateActivityWizard({ user, profileData, onClose, onAct
               updateFormData={updateFormData}
               onNext={handleStep3Complete}
               onBack={() => setCurrentStep(2)}
-              onResetAndBack={handleResetQuestionsAndBack}
+              onResetQuestions={handleResetQuestionsAndGoToStep1}
               saving={saving}
             />
           )}

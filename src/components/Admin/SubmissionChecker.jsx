@@ -152,11 +152,31 @@ export default function SubmissionChecker({ submission, activity, onClose, onGra
 
                     <div className="q-prompt mt-2">
                       <p className="q-text">{q.questionText || q.paperFileName}</p>
-                      {q.paperFileUrl && (
+                      {q.attachedFiles && q.attachedFiles.length > 0 && (
+                        <div className="checker-attached-files-list flex-align-center gap-2 mt-2 flex-wrap">
+                          {q.attachedFiles.map((af, afIdx) => (
+                            <a
+                              key={af.id || afIdx}
+                              href={af.url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="btn btn-secondary btn-sm"
+                            >
+                              {af.type === 'image' ? '🖼️' : '📄'} {af.name || 'View Attachment'} ↗
+                            </a>
+                          ))}
+                        </div>
+                      )}
+                      {q.paperFileUrl && !q.attachedFiles?.length && (
                         <div className="paper-link-box mt-2">
                           <a href={q.paperFileUrl} target="_blank" rel="noopener noreferrer" className="btn btn-secondary btn-sm">
                             📄 View Question Paper File
                           </a>
+                        </div>
+                      )}
+                      {(q.answerGuidelines || q.description) && q.type === 'written' && (
+                        <div className="checker-guidelines-box mt-2 p-2 bg-light rounded text-xs text-muted">
+                          <strong>Guidelines:</strong> {q.answerGuidelines || q.description}
                         </div>
                       )}
                     </div>

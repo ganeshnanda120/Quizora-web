@@ -21,7 +21,7 @@ export default function MCQEditorPage({
   const [marks, setMarks] = useState(
     questionToEdit?.marks !== undefined && questionToEdit?.marks !== null
       ? String(questionToEdit.marks)
-      : isExam ? '1' : ''
+      : ''
   );
   const [negativeMark, setNegativeMark] = useState(
     questionToEdit?.negativeMark !== undefined && questionToEdit?.negativeMark !== null
@@ -78,7 +78,7 @@ export default function MCQEditorPage({
   // Reset form state to add another question
   const resetFormState = () => {
     setQuestionText('');
-    setMarks(isExam ? '1' : '');
+    setMarks('');
     setNegativeMark(formData.negativeMarkValue || '0.25');
     setOptions(['', '']);
     setCorrectOptionIndices([0]);
@@ -393,7 +393,7 @@ export default function MCQEditorPage({
         <div className="mcq-form-card">
           {/* BOX 1: QUESTION TEXT, MULTIPLE UPLOADS, MARKS & NEGATIVE MARKING */}
           <div className="mcq-section-card">
-            <label className="form-label font-bold text-base mb-2 block" htmlFor="mcq-question-text">
+            <label className="form-label font-bold text-base block" style={{ marginBottom: '18px' }} htmlFor="mcq-question-text">
               Question Text <span className="req-star">*</span>
             </label>
 
@@ -429,7 +429,7 @@ export default function MCQEditorPage({
                     <polyline points="17 8 12 3 7 8"/>
                     <line x1="12" y1="3" x2="12" y2="15"/>
                   </svg>
-                  <span>+ Upload Image/PDF</span>
+                  <span>+ Upload</span>
                 </label>
               </div>
             </div>
@@ -515,7 +515,7 @@ export default function MCQEditorPage({
             )}
 
             {/* MARKS & NEGATIVE MARKING INTEGRATED IN BOX 1 */}
-            <div className="marks-section-inside-box1 mt-4 pt-3 border-top">
+            <div className="marks-section-inside-box1 mt-5 pt-4 border-top">
               <div className="form-grid-2">
                 {/* Marks Field */}
                 <div className="form-group mb-0">
@@ -702,51 +702,51 @@ export default function MCQEditorPage({
             </div>
           </div>
         </div>
-      </div>
 
-      {/* BOTTOM ACTIONS BAR - ALL 3 BUTTONS IN A SINGLE ROW AT THE LAST */}
-      <div className="fullscreen-mcq-bottom-bar flex-end">
-        <div className="single-row-bottom-actions flex-align-center gap-3">
-          <button
-            type="button"
-            className="btn btn-secondary btn-cancel-mcq"
-            onClick={onCancel}
-            disabled={fileUploading}
-          >
-            Cancel
-          </button>
+        {/* BOTTOM ACTIONS BAR - SCROLLABLE AT END OF PAGE */}
+        <div className="fullscreen-mcq-bottom-bar flex-end">
+          <div className="single-row-bottom-actions flex-align-center gap-3">
+            <button
+              type="button"
+              className="btn btn-secondary btn-cancel-mcq"
+              onClick={onCancel}
+              disabled={fileUploading}
+            >
+              Cancel
+            </button>
 
-          <button
-            type="button"
-            className="btn btn-primary btn-save-mcq"
-            onClick={handleSaveOnly}
-            disabled={fileUploading}
-          >
-            {fileUploading ? (
-              <div className="spinner-container">
-                <div className="spinner"></div>
-                <span>Saving...</span>
-              </div>
-            ) : (
-              <span>Save Question</span>
-            )}
-          </button>
+            <button
+              type="button"
+              className="btn btn-primary btn-save-mcq"
+              onClick={handleSaveOnly}
+              disabled={fileUploading}
+            >
+              {fileUploading ? (
+                <div className="spinner-container">
+                  <div className="spinner"></div>
+                  <span>Saving...</span>
+                </div>
+              ) : (
+                <span>Save Question</span>
+              )}
+            </button>
 
-          <button
-            type="button"
-            className="btn btn-accent btn-add-more-mcq"
-            onClick={handleSaveAndAddMore}
-            disabled={fileUploading}
-          >
-            {fileUploading ? (
-              <div className="spinner-container">
-                <div className="spinner"></div>
-                <span>Saving...</span>
-              </div>
-            ) : (
-              <span>Add More Question</span>
-            )}
-          </button>
+            <button
+              type="button"
+              className="btn btn-accent btn-add-more-mcq"
+              onClick={handleSaveAndAddMore}
+              disabled={fileUploading}
+            >
+              {fileUploading ? (
+                <div className="spinner-container">
+                  <div className="spinner"></div>
+                  <span>Saving...</span>
+                </div>
+              ) : (
+                <span>Add More Question</span>
+              )}
+            </button>
+          </div>
         </div>
       </div>
     </div>
