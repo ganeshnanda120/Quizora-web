@@ -991,9 +991,15 @@ export default function StudentAttendancePaper({
                         />
                         <label
                           htmlFor={`written-file-input-${currentQuestion.id}`}
-                          className="btn btn-secondary btn-sm font-semibold cursor-pointer inline-flex align-center gap-1.5 py-1 px-3 m-0"
+                          className="btn btn-upload-mcq-side cursor-pointer"
+                          style={{ padding: '6px 14px', fontSize: '0.8rem' }}
                         >
-                          {uploadingQId === `${currentQuestion.id}_files` ? 'Uploading...' : '📁 Upload'}
+                          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                            <polyline points="17 8 12 3 7 8" />
+                            <line x1="12" y1="3" x2="12" y2="15" />
+                          </svg>
+                          <span>{uploadingQId === `${currentQuestion.id}_files` ? 'Uploading...' : 'Upload'}</span>
                         </label>
                       </div>
                     </div>
@@ -1047,9 +1053,14 @@ export default function StudentAttendancePaper({
                       />
                       <label
                         htmlFor={`file-input-${currentQuestion.id}`}
-                        className="btn btn-primary btn-sm font-semibold cursor-pointer inline-flex align-center gap-1.5 py-1.5 px-4 m-0"
+                        className="btn btn-upload-mcq-side cursor-pointer"
                       >
-                        {uploadingQId === currentQuestion.id ? 'Uploading...' : '📁 Upload'}
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                          <polyline points="17 8 12 3 7 8" />
+                          <line x1="12" y1="3" x2="12" y2="15" />
+                        </svg>
+                        <span>{uploadingQId === currentQuestion.id ? 'Uploading...' : 'Upload'}</span>
                       </label>
                     </div>
                   </div>
