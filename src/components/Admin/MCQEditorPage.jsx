@@ -580,7 +580,6 @@ export default function MCQEditorPage({
                   <button
                     type="button"
                     className={`btn-onoff-toggle ${allowMultipleChoices ? 'on' : 'off'}`}
-                    style={{ marginLeft: '32px' }}
                     onClick={() => {
                       const nextVal = !allowMultipleChoices;
                       setAllowMultipleChoices(nextVal);
@@ -692,7 +691,6 @@ export default function MCQEditorPage({
                 <button
                   type="button"
                   className={`btn-onoff-toggle ${enableExplanation ? 'on' : 'off'}`}
-                  style={{ marginLeft: '32px' }}
                   onClick={() => setEnableExplanation(!enableExplanation)}
                 >
                   <span className="onoff-text">{enableExplanation ? 'ON' : 'OFF'}</span>
