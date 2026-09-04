@@ -7,6 +7,7 @@ import Register from './components/Auth/Register';
 import VerifyEmail from './components/Auth/VerifyEmail';
 import CompleteProfile from './components/Profile/CompleteProfile';
 import Dashboard from './pages/Dashboard';
+import StudentActivityScreen from './components/Student/StudentActivityScreen';
 import logoImg from './assets/logo.png';
 import './App.css';
 
@@ -109,6 +110,11 @@ function App() {
     // Hold routing until both auth state and profile data have finished loading
     if (authLoading || profileLoading) return;
 
+    // Do NOT redirect if accessing a direct activity URL
+    if (currentPath.startsWith('/activity/')) {
+      return;
+    }
+
     let target = null;
     if (user) {
       if (isUserVerified(user)) {
@@ -166,6 +172,19 @@ function App() {
         <div className="spinner large"></div>
         <p>Loading application...</p>
       </div>
+    );
+  }
+
+  // DIRECT ACTIVITY LINK VIEW CONTROLLER (ACCESSED VIA SHARE LINK)
+  if (currentPath.startsWith('/activity/')) {
+    const activityId = currentPath.replace('/activity/', '').split('?')[0].split('/')[0];
+    return (
+      <StudentActivityScreen
+        activityId={activityId}
+        user={user}
+        profileData={profileData}
+        onNavigateHome={() => navigateTo(user ? '/dashboard' : '/login')}
+      />
     );
   }
 

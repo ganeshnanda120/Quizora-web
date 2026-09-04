@@ -135,7 +135,7 @@ export const getActivityById = async (activityId) => {
     const docRef = doc(db, 'activities', activityId);
     const snap = await getDoc(docRef);
     if (snap.exists()) {
-      return snap.data();
+      return { activityId, ...snap.data() };
     }
     return localData;
   } catch (err) {

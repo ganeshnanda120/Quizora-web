@@ -21,6 +21,8 @@ export default function Step4ParticipantForm({
 }) {
   const [error, setError] = useState('');
   const [showCancelModal, setShowCancelModal] = useState(false);
+  const [showPreviewModal, setShowPreviewModal] = useState(false);
+  const [previewTestValues, setPreviewTestValues] = useState({});
 
   // Custom Field / Edit Modal State
   const [showCustomModal, setShowCustomModal] = useState(false);
@@ -326,11 +328,28 @@ export default function Step4ParticipantForm({
       )}
 
       {/* Header */}
-      <div className="wizard-step-header">
-        <h2 className="wizard-step-title">Participant Details Form</h2>
-        <p className="wizard-step-subtitle">
-          Define the identification details that students must provide before taking or submitting this activity. Check "Optional" for any field you wish to make optional.
-        </p>
+      <div className="wizard-step-header flex-between align-center flex-wrap gap-3">
+        <div>
+          <h2 className="wizard-step-title">Participant Details Form</h2>
+          <p className="wizard-step-subtitle">
+            Define the identification details that students must provide before taking or submitting this activity. Check "Optional" for any field you wish to make optional.
+          </p>
+        </div>
+        <button
+          type="button"
+          className="btn btn-secondary btn-preview-toggle"
+          onClick={() => {
+            setPreviewTestValues({});
+            setShowPreviewModal(true);
+          }}
+          title="Preview form as it appears on the student screen"
+        >
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+            <circle cx="12" cy="12" r="3" />
+          </svg>
+          <span>Preview Form</span>
+        </button>
       </div>
 
       {error && (
@@ -490,6 +509,113 @@ export default function Step4ParticipantForm({
           )}
         </button>
       </div>
+
+      {/* STUDENT PARTICIPANT FORM PREVIEW MODAL */}
+      {showPreviewModal && (
+        <div className="modal-backdrop preview-modal-backdrop" onClick={() => setShowPreviewModal(false)}>
+          <div className="modal-card wide-modal admin-preview-modal-card" onClick={(e) => e.stopPropagation()}>
+            <div className="preview-modal-header flex-between align-center">
+              <div className="preview-header-info">
+                <span className="preview-mode-tag">👁️ ADMIN PREVIEW MODE</span>
+                <h3 className="preview-activity-title font-bold text-lg text-dark mt-1">
+                  Participant Details Screen
+                </h3>
+                <span className="text-xs text-muted block mt-1">
+                  This is the exact form students will see before entering the activity.
+                </span>
+              </div>
+              <button
+                type="button"
+                className="btn btn-secondary btn-sm flex-align-center gap-1"
+                onClick={() => setShowPreviewModal(false)}
+              >
+                <span>&times; Close Preview</span>
+              </button>
+            </div>
+
+            <div className="preview-modal-body modal-body-scroll">
+              <div className="student-form-preview-card p-6 bg-white border rounded-xl shadow-sm max-w-lg mx-auto">
+                <div className="student-preview-brand-header text-center mb-5">
+                  <span className="badge badge-primary text-xs uppercase font-bold tracking-wider mb-2 inline-block">
+                    Participant Identification
+                  </span>
+                  <h3 className="text-xl font-bold text-dark m-0">Enter Your Details</h3>
+                  <p className="text-xs text-muted mt-1">
+                    Please provide your details below to start attending this {formData?.purpose || 'activity'}.
+                  </p>
+                </div>
+
+                <div className="student-preview-fields-stack flex flex-col gap-4">
+                  {participantFields.length === 0 ? (
+                    <p className="text-sm text-muted text-center py-4">No fields configured.</p>
+                  ) : (
+                    participantFields.map((field, idx) => {
+                      const isRequired = field.isOptional !== true;
+                      return (
+                        <div key={field.id || idx} className="form-group mb-0">
+                          <label className="form-label font-semibold text-sm flex-between align-center mb-1">
+                            <span>
+                              {field.label || `Field ${idx + 1}`}
+                              {isRequired && <span className="req-star ml-1 text-danger font-bold">*</span>}
+                            </span>
+                            {!isRequired && (
+                              <span className="badge badge-secondary text-xs font-normal">Optional</span>
+                            )}
+                          </label>
+                          <input
+                            type="text"
+                            className="form-input"
+                            placeholder={`Enter ${field.label.toLowerCase()}...`}
+                            value={previewTestValues[field.id || idx] || ''}
+                            onChange={(e) => {
+                              setPreviewTestValues((prev) => ({
+                                ...prev,
+                                [field.id || idx]: e.target.value
+                              }));
+                            }}
+                          />
+                        </div>
+                      );
+                    })
+                  )}
+
+                  <div className="preview-notice-box p-3 bg-blue-50 border border-blue-100 rounded-lg text-xs text-primary flex-align-center gap-2 mt-2">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <circle cx="12" cy="12" r="10" />
+                      <line x1="12" y1="16" x2="12" y2="12" />
+                      <line x1="12" y1="8" x2="12.01" y2="8" />
+                    </svg>
+                    <span>Only fields with red asterisks (*) are mandatory. Optional details can be skipped.</span>
+                  </div>
+
+                  <button
+                    type="button"
+                    className="btn btn-primary btn-lg w-full mt-3"
+                    onClick={() => {
+                      alert('Interactive Preview: In live mode, clicking this button will validate the mandatory fields and immediately open the questions interface.');
+                    }}
+                  >
+                    <span>Continue to Activity &rarr;</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <div className="modal-footer-bar flex-between align-center pt-3 border-top">
+              <span className="text-xs text-muted">
+                Admins can test typing values in preview mode.
+              </span>
+              <button
+                type="button"
+                className="btn btn-primary btn-sm"
+                onClick={() => setShowPreviewModal(false)}
+              >
+                Done Previewing
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </form>
   );
 }

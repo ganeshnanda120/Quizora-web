@@ -29,6 +29,9 @@ export default function Step3QuestionsSetup({
   const [editingQuestionIndex, setEditingQuestionIndex] = useState(null);
   const [deletingTarget, setDeletingTarget] = useState(null); // { secIdx, partIndex, qIdx, question }
   const [showCancelModal, setShowCancelModal] = useState(false);
+  const [showPreviewModal, setShowPreviewModal] = useState(false);
+  const [previewActiveSectionIdx, setPreviewActiveSectionIdx] = useState(0);
+  const [previewActivePartIdx, setPreviewActivePartIdx] = useState(0);
 
   const [error, setError] = useState('');
   const [fileUploading, setFileUploading] = useState(false);
@@ -506,13 +509,31 @@ export default function Step3QuestionsSetup({
 
   return (
     <div className="wizard-step-container fade-in">
-      <div className="wizard-step-header">
-        <h2 className="wizard-step-title">Question Creation &amp; Setup</h2>
-        <p className="wizard-step-subtitle">
-          {partMode === 'sections'
-            ? 'Add and configure independent questions for each Section and Part.'
-            : 'Add and manage questions for each part of your activity.'}
-        </p>
+      <div className="wizard-step-header flex-between align-center flex-wrap gap-3">
+        <div>
+          <h2 className="wizard-step-title">Question Creation &amp; Setup</h2>
+          <p className="wizard-step-subtitle">
+            {partMode === 'sections'
+              ? 'Add and configure independent questions for each Section and Part.'
+              : 'Add and manage questions for each part of your activity.'}
+          </p>
+        </div>
+        <button
+          type="button"
+          className="btn btn-secondary btn-preview-toggle"
+          onClick={() => {
+            setPreviewActiveSectionIdx(0);
+            setPreviewActivePartIdx(0);
+            setShowPreviewModal(true);
+          }}
+          title="Preview questions as they appear on the student screen"
+        >
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+            <circle cx="12" cy="12" r="3" />
+          </svg>
+          <span>Preview Questions</span>
+        </button>
       </div>
 
       {error && (
@@ -909,55 +930,379 @@ export default function Step3QuestionsSetup({
         </button>
       </div>
 
-      {/* MODAL 1: QUESTION TYPE SELECTION */}
+      {/* MODAL 1: QUESTION TYPE SELECTION (POPUP) */}
       {typeSelectorTarget !== null && (
         <div className="modal-backdrop" onClick={() => setTypeSelectorTarget(null)}>
           <div className="modal-card type-selection-modal" onClick={(e) => e.stopPropagation()}>
-            <div className="modal-header flex-between">
+            <div className="modal-header-bar flex-between align-center">
               <div>
                 <span className="badge badge-primary">
                   {activeModalSection ? `Section: ${activeModalSection.name || 'Section'} • ` : ''}
                   {activeModalPart?.title || `Part ${(typeSelectorTarget.partIndex || 0) + 1}`}
                 </span>
-                <h3 className="modal-title mt-1">Add Question</h3>
+                <h3 className="modal-title-text mt-1 font-bold text-dark text-lg">Select Question Type</h3>
               </div>
-              <button className="modal-close-btn" onClick={() => setTypeSelectorTarget(null)}>&times;</button>
+              <button
+                type="button"
+                className="modal-close-btn"
+                onClick={() => setTypeSelectorTarget(null)}
+                title="Close"
+                aria-label="Close"
+              >
+                &times;
+              </button>
             </div>
-            <div className="type-options-grid mt-4">
-              <button
-                type="button"
-                className="type-select-card"
-                onClick={() => openEditor(typeSelectorTarget.partIndex, 'mcq', null, null, typeSelectorTarget.secIdx)}
-              >
-                <div className="type-icon-box mcq-bg">+</div>
-                <div className="type-details">
-                  <h4>+ MCQ</h4>
-                  <p>Multiple Choice Question with options</p>
-                </div>
-              </button>
+            
+            <div className="modal-body-content py-3">
+              <p className="text-xs text-muted mb-3">
+                Choose the format of the question you want to create for this part.
+              </p>
+              <div className="type-options-grid">
+                <button
+                  type="button"
+                  className="type-select-card"
+                  onClick={() => openEditor(typeSelectorTarget.partIndex, 'mcq', null, null, typeSelectorTarget.secIdx)}
+                >
+                  <div className="type-icon-box mcq-bg">+</div>
+                  <div className="type-details">
+                    <h4>Multiple Choice (MCQ)</h4>
+                    <p>Single or multiple correct answers with optional auto-grading</p>
+                  </div>
+                  <span className="type-arrow-icon">&rarr;</span>
+                </button>
 
-              <button
-                type="button"
-                className="type-select-card"
-                onClick={() => openEditor(typeSelectorTarget.partIndex, 'written', null, null, typeSelectorTarget.secIdx)}
-              >
-                <div className="type-icon-box written-bg">+</div>
-                <div className="type-details">
-                  <h4>+ Written</h4>
-                  <p>Short or long written answer format</p>
-                </div>
-              </button>
+                <button
+                  type="button"
+                  className="type-select-card"
+                  onClick={() => openEditor(typeSelectorTarget.partIndex, 'written', null, null, typeSelectorTarget.secIdx)}
+                >
+                  <div className="type-icon-box written-bg">+</div>
+                  <div className="type-details">
+                    <h4>Written Question</h4>
+                    <p>Descriptive, short, or long-form typed answers from students</p>
+                  </div>
+                  <span className="type-arrow-icon">&rarr;</span>
+                </button>
 
+                <button
+                  type="button"
+                  className="type-select-card"
+                  onClick={() => openEditor(typeSelectorTarget.partIndex, 'upload', null, null, typeSelectorTarget.secIdx)}
+                >
+                  <div className="type-icon-box paper-bg">+</div>
+                  <div className="type-details">
+                    <h4>Upload Image / PDF</h4>
+                    <p>Question paper attachment where students upload handwritten answer files</p>
+                  </div>
+                  <span className="type-arrow-icon">&rarr;</span>
+                </button>
+              </div>
+            </div>
+            
+            <div className="modal-footer-bar flex-end pt-3 border-top">
               <button
                 type="button"
-                className="type-select-card"
-                onClick={() => openEditor(typeSelectorTarget.partIndex, 'upload', null, null, typeSelectorTarget.secIdx)}
+                className="btn btn-secondary btn-sm"
+                onClick={() => setTypeSelectorTarget(null)}
               >
-                <div className="type-icon-box paper-bg">+</div>
-                <div className="type-details">
-                  <h4>+ Upload</h4>
-                  <p>Upload one or more Image or PDF files</p>
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* QUESTION PREVIEW MODAL (FULL USER SCREEN PREVIEW) */}
+      {showPreviewModal && (
+        <div className="modal-backdrop preview-modal-backdrop" onClick={() => setShowPreviewModal(false)}>
+          <div className="modal-card wide-modal admin-preview-modal-card" onClick={(e) => e.stopPropagation()}>
+            <div className="preview-modal-header flex-between align-center">
+              <div className="preview-header-info">
+                <span className="preview-mode-tag">👁️ ADMIN PREVIEW MODE</span>
+                <h3 className="preview-activity-title font-bold text-lg text-dark mt-1">
+                  {formData.title || 'Untitled Activity'}
+                </h3>
+                <div className="preview-meta-chips flex-align-center gap-2 mt-1">
+                  <span className="badge badge-primary text-xs">{formData.purpose || 'Exam'}</span>
+                  {formData.subject && <span className="badge badge-secondary text-xs">{formData.subject}</span>}
+                  {formData.totalMarks && <span className="badge badge-outline text-xs">Total Marks: {formData.totalMarks}</span>}
                 </div>
+              </div>
+              <button
+                type="button"
+                className="btn btn-secondary btn-sm flex-align-center gap-1"
+                onClick={() => setShowPreviewModal(false)}
+              >
+                <span>&times; Close Preview</span>
+              </button>
+            </div>
+
+            <div className="preview-modal-body modal-body-scroll">
+              <div className="preview-viewport-container">
+                {/* SECTION TABS (IF SECTIONS MODE) */}
+                {partMode === 'sections' && sections.length > 0 && (
+                  <div className="preview-section-tabs mb-4">
+                    <div className="preview-tab-label text-xs font-bold text-muted uppercase mb-2">Sections</div>
+                    <div className="preview-tabs-row flex-wrap gap-2">
+                      {sections.map((sec, sIdx) => (
+                        <button
+                          key={sec.id || sIdx}
+                          type="button"
+                          className={`preview-tab-btn ${previewActiveSectionIdx === sIdx ? 'active' : ''}`}
+                          onClick={() => {
+                            setPreviewActiveSectionIdx(sIdx);
+                            setPreviewActivePartIdx(0);
+                          }}
+                        >
+                          {sec.name || `Section ${sIdx + 1}`}
+                          <span className="preview-tab-badge">
+                            {(sec.parts || []).reduce((acc, p) => acc + (p.questions?.length || 0), 0)} Qs
+                          </span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* PART TABS */}
+                {(() => {
+                  const currentSec = partMode === 'sections' ? sections[previewActiveSectionIdx] : null;
+                  const currentPartsList = partMode === 'sections' ? (currentSec?.parts || []) : parts;
+                  const activePart = currentPartsList[previewActivePartIdx] || currentPartsList[0];
+                  const qList = activePart?.questions || [];
+
+                  return (
+                    <div className="preview-part-workspace">
+                      {currentPartsList.length > 1 && (
+                        <div className="preview-part-tabs mb-4">
+                          <div className="preview-tab-label text-xs font-bold text-muted uppercase mb-2">Parts in this Section</div>
+                          <div className="preview-tabs-row flex-wrap gap-2">
+                            {currentPartsList.map((p, pIdx) => (
+                              <button
+                                key={p.id || pIdx}
+                                type="button"
+                                className={`preview-part-pill ${previewActivePartIdx === pIdx ? 'active' : ''}`}
+                                onClick={() => setPreviewActivePartIdx(pIdx)}
+                              >
+                                {p.title || `Part ${pIdx + 1}`}
+                                <span className="preview-pill-count">({(p.questions || []).length})</span>
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* PART BANNER */}
+                      <div className="preview-part-banner mb-4">
+                        <div className="flex-between align-center flex-wrap gap-2">
+                          <h4 className="font-bold text-dark text-base m-0">
+                            {activePart?.title || `Part ${previewActivePartIdx + 1}`}
+                          </h4>
+                          {activePart?.partTotalMarks && (
+                            <span className="badge badge-primary text-xs">
+                              Part Marks: {activePart.partTotalMarks}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* QUESTIONS LIST */}
+                      {qList.length === 0 ? (
+                        <div className="preview-empty-questions p-5 text-center bg-light border rounded-lg">
+                          <p className="text-muted font-medium m-0">
+                            No questions added yet to this part. Add questions in the editor to preview them here.
+                          </p>
+                        </div>
+                      ) : (
+                        <div className="preview-questions-list flex flex-col gap-4">
+                          {qList.map((q, qIdx) => {
+                            const isMcq = q.type === 'mcq';
+                            const isWritten = q.type === 'written';
+                            const isUpload = q.type === 'upload' || q.type === 'upload_paper';
+                            const optionsList = q.options || [];
+
+                            return (
+                              <div key={q.id || qIdx} className="student-question-card preview-card p-4 border rounded-xl bg-white shadow-sm">
+                                {/* QUESTION HEADER */}
+                                <div className="student-q-header flex-between align-center mb-3">
+                                  <div className="student-q-title-group flex-align-center gap-2">
+                                    <span className="student-q-num font-bold text-dark text-base">Q{qIdx + 1}.</span>
+                                    <span className={`badge-type-pill text-xs uppercase font-bold ${q.type}`}>
+                                      {isMcq ? 'MCQ' : isWritten ? 'Written' : 'Upload'}
+                                    </span>
+                                  </div>
+                                  <div className="student-q-marks-group flex-align-center gap-2">
+                                    {q.marks !== null && q.marks !== undefined && q.marks !== '' && (
+                                      <span className="student-q-marks-pill font-semibold text-xs bg-primary-light text-primary px-2 py-1 rounded">
+                                        {q.marks} {Number(q.marks) === 1 ? 'Mark' : 'Marks'}
+                                      </span>
+                                    )}
+                                    {isMcq && q.negativeMark && Number(q.negativeMark) > 0 && (
+                                      <span className="student-q-neg-marks-pill font-semibold text-xs bg-red-50 text-danger px-2 py-1 rounded">
+                                        -{q.negativeMark} Neg
+                                      </span>
+                                    )}
+                                  </div>
+                                </div>
+
+                                {/* QUESTION TEXT */}
+                                {q.questionText && (
+                                  <div className="student-q-prompt mb-3">
+                                    <p className="student-q-text font-medium text-base text-dark leading-relaxed m-0">
+                                      {q.questionText}
+                                    </p>
+                                  </div>
+                                )}
+
+                                {/* ATTACHMENTS (IMAGES OR PDFS) */}
+                                {(q.attachedFiles?.length > 0 || q.imageUrl || q.paperFileUrl) && (
+                                  <div className="student-q-attachments-grid mb-3">
+                                    {(q.attachedFiles || []).map((fileItem, fIdx) => (
+                                      <div key={fileItem.id || fIdx} className="student-attachment-card mb-2">
+                                        {fileItem.type === 'image' || (!fileItem.type && fileItem.url?.match(/\.(jpg|jpeg|png|webp)/i)) ? (
+                                          <div className="attachment-image-wrapper">
+                                            <img
+                                              src={fileItem.url}
+                                              alt={fileItem.name || 'Question attachment'}
+                                              className="attachment-img max-h-64 object-contain rounded border"
+                                            />
+                                          </div>
+                                        ) : (
+                                          <div className="attachment-pdf-row flex-align-center gap-2 p-2 bg-light border rounded">
+                                            <span className="pdf-icon-badge text-xs font-bold bg-danger text-white px-2 py-1 rounded">PDF</span>
+                                            <a
+                                              href={fileItem.url}
+                                              target="_blank"
+                                              rel="noopener noreferrer"
+                                              className="pdf-download-link text-sm font-semibold text-primary"
+                                            >
+                                              📄 {fileItem.name || 'View Attached PDF'} ↗
+                                            </a>
+                                          </div>
+                                        )}
+                                      </div>
+                                    ))}
+
+                                    {/* Legacy Single Attachment Fallback */}
+                                    {(!q.attachedFiles || q.attachedFiles.length === 0) && (q.imageUrl || q.paperFileUrl) && (
+                                      <div className="student-attachment-card mb-2">
+                                        {q.imageUrl ? (
+                                          <img
+                                            src={q.imageUrl}
+                                            alt="Question attachment"
+                                            className="attachment-img max-h-64 object-contain rounded border"
+                                          />
+                                        ) : (
+                                          <div className="attachment-pdf-row flex-align-center gap-2 p-2 bg-light border rounded">
+                                            <span className="pdf-icon-badge text-xs font-bold bg-danger text-white px-2 py-1 rounded">PDF</span>
+                                            <a
+                                              href={q.paperFileUrl}
+                                              target="_blank"
+                                              rel="noopener noreferrer"
+                                              className="pdf-download-link text-sm font-semibold text-primary"
+                                            >
+                                              📄 {q.paperFileName || 'View Attached PDF'} ↗
+                                            </a>
+                                          </div>
+                                        )}
+                                      </div>
+                                    )}
+                                  </div>
+                                )}
+
+                                {/* GUIDELINES / DESCRIPTION */}
+                                {(q.answerGuidelines || q.description || q.explanation) && (
+                                  <div className="student-guidelines-box mb-3 p-3 bg-slate-50 border border-slate-200 rounded-lg">
+                                    <div className="guidelines-header flex-align-center gap-2 mb-1">
+                                      <span className="guidelines-title font-bold text-xs uppercase tracking-wider text-muted">
+                                        📌 Instructions / Description
+                                      </span>
+                                    </div>
+                                    <p className="guidelines-content text-sm text-dark m-0">
+                                      {q.answerGuidelines || q.description || q.explanation}
+                                    </p>
+                                  </div>
+                                )}
+
+                                {/* QUESTION TYPE SPECIFIC INTERACTIVE INPUT PREVIEWS */}
+                                {isMcq && (
+                                  <div className="student-mcq-options-grid mt-3 flex flex-col gap-2">
+                                    {optionsList.map((opt, optIdx) => {
+                                      const optLetter = String.fromCharCode(65 + optIdx);
+                                      const isCorrectAdmin = (q.correctIndices || []).includes(optIdx);
+
+                                      return (
+                                        <div
+                                          key={optIdx}
+                                          className={`student-mcq-option-item flex-align-center gap-3 p-3 border rounded-lg transition-all ${isCorrectAdmin ? 'preview-admin-correct' : 'bg-white'}`}
+                                        >
+                                          <span className="option-letter-circle font-bold text-xs">
+                                            {optLetter}
+                                          </span>
+                                          <span className="option-text text-sm font-medium text-dark flex-1">
+                                            {typeof opt === 'string' ? opt : opt?.text || `Option ${optIdx + 1}`}
+                                          </span>
+                                          {isCorrectAdmin && (
+                                            <span className="badge badge-success text-xs font-semibold">
+                                              ✓ Correct Answer
+                                            </span>
+                                          )}
+                                        </div>
+                                      );
+                                    })}
+                                  </div>
+                                )}
+
+                                {isWritten && (
+                                  <div className="student-written-answer-area mt-3">
+                                    <label className="form-label text-xs font-bold text-muted mb-1 block">
+                                      Student Answer Box:
+                                    </label>
+                                    <textarea
+                                      className="form-input text-area"
+                                      rows="4"
+                                      placeholder="Student will type their descriptive answer here..."
+                                      disabled
+                                    />
+                                  </div>
+                                )}
+
+                                {isUpload && (
+                                  <div className="student-upload-answer-area mt-3 p-4 border-2 border-dashed border-slate-300 rounded-lg text-center bg-slate-50">
+                                    <svg className="mx-auto mb-2 text-primary" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                                      <polyline points="17 8 12 3 7 8"/>
+                                      <line x1="12" y1="3" x2="12" y2="15"/>
+                                    </svg>
+                                    <p className="text-sm font-semibold text-dark m-0">
+                                      Student Upload Area (Images / PDFs)
+                                    </p>
+                                    <span className="text-xs text-muted block mt-1">
+                                      Students will click or drag their handwritten answer sheet files here to upload.
+                                    </span>
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })()}
+              </div>
+            </div>
+
+            <div className="modal-footer-bar flex-between align-center pt-3 border-top">
+              <span className="text-xs text-muted">
+                Admins can review how the questions appear to students. No student answers are recorded in preview mode.
+              </span>
+              <button
+                type="button"
+                className="btn btn-primary btn-sm"
+                onClick={() => setShowPreviewModal(false)}
+              >
+                Done Previewing
               </button>
             </div>
           </div>
