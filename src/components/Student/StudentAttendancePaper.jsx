@@ -7,8 +7,7 @@ export default function StudentAttendancePaper({
   activityId,
   participantData,
   onSubmit,
-  onExpire,
-  user
+  onExpire
 }) {
   const partMode = activity?.partMode || 'parts';
   const enableNegativeMarking = !!activity?.enableNegativeMarking;
@@ -92,7 +91,6 @@ export default function StudentAttendancePaper({
   // Modals & Screen States
   const [showPartTransitionModal, setShowPartTransitionModal] = useState(false);
   const [showUnansweredWarningModal, setShowUnansweredWarningModal] = useState(false);
-  const [pendingNextPartIdx, setPendingNextPartIdx] = useState(null);
   const [showReviewModal, setShowReviewModal] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
@@ -100,10 +98,22 @@ export default function StudentAttendancePaper({
   const [submittedParts, setSubmittedParts] = useState(() => savedState?.submittedParts || {});
 
   // Determine active section and parts list
-  const activeSection = partMode === 'sections' ? (sections[activeSecIdx] || sections[0]) : null;
-  const activePartsList = partMode === 'sections' ? (activeSection?.parts || []) : rawParts;
-  const activePart = activePartsList[activePartIdx] || activePartsList[0] || { questions: [] };
-  const activeQuestions = activePart?.questions || [];
+  const activeSection = useMemo(() => {
+    return partMode === 'sections' ? (sections[activeSecIdx] || sections[0]) : null;
+  }, [partMode, sections, activeSecIdx]);
+
+  const activePartsList = useMemo(() => {
+    return partMode === 'sections' ? (activeSection?.parts || []) : rawParts;
+  }, [partMode, activeSection, rawParts]);
+
+  const activePart = useMemo(() => {
+    return activePartsList[activePartIdx] || activePartsList[0] || { questions: [] };
+  }, [activePartsList, activePartIdx]);
+
+  const activeQuestions = useMemo(() => {
+    return activePart?.questions || [];
+  }, [activePart]);
+
   const currentQuestion = activeQuestions[activeQIdx] || activeQuestions[0];
 
   // Part navigation mode ('sequential' | 'free' | 'individualTime')
@@ -151,10 +161,12 @@ export default function StudentAttendancePaper({
     }
   }, [answers, onSubmit, onExpire]);
 
+  const activityEndTime = activity?.endTime;
+
   // Calculate Global Seconds Remaining (monotonic against real clock)
   const globalSecondsRemaining = useMemo(() => {
-    if (activity?.endTime) {
-      const endMs = new Date(activity.endTime).getTime();
+    if (activityEndTime) {
+      const endMs = new Date(activityEndTime).getTime();
       return Math.max(0, Math.floor((endMs - currentTime) / 1000));
     }
     if (totalDurationSec !== null) {
@@ -162,7 +174,7 @@ export default function StudentAttendancePaper({
       return Math.max(0, totalDurationSec - elapsed);
     }
     return null;
-  }, [activity?.endTime, totalDurationSec, currentTime, sessionStartTime]);
+  }, [activityEndTime, totalDurationSec, currentTime, sessionStartTime]);
 
   // Individual Part Time Remaining calculation
   const partSecondsRemaining = useMemo(() => {
@@ -215,10 +227,13 @@ export default function StudentAttendancePaper({
   // Mark current question as visited
   useEffect(() => {
     if (currentQuestion?.id) {
-      setVisitedQuestions((prev) => {
-        if (prev[currentQuestion.id]) return prev;
-        return { ...prev, [currentQuestion.id]: true };
-      });
+      const timer = setTimeout(() => {
+        setVisitedQuestions((prev) => {
+          if (prev[currentQuestion.id]) return prev;
+          return { ...prev, [currentQuestion.id]: true };
+        });
+      }, 0);
+      return () => clearTimeout(timer);
     }
   }, [currentQuestion?.id]);
 
@@ -298,7 +313,7 @@ export default function StudentAttendancePaper({
     // In 'sequential' mode, unlocked only if previous part completed
     const prevKey = `${sIdx}_${pIdx - 1}`;
     return !!completedParts[prevKey];
-  }, [partNavMode, isPartSubmitted, isPartStarted, completedParts]);
+  }, [partNavMode, isPartSubmitted, isPartStarted, completedParts, activeSecIdx]);
 
   // Check if a Part is completed
   const isPartCompleted = useCallback((pIdx, sIdx = activeSecIdx) => {
@@ -407,11 +422,8 @@ export default function StudentAttendancePaper({
   // Complete Part / Advance to Next Part Action
   const handleCompletePartAction = () => {
     const unansweredInPart = activeQuestions.length - activePartAnsweredCount;
-    const hasNextPart = activePartIdx < activePartsList.length - 1;
-    const hasNextSec = partMode === 'sections' && activeSecIdx < sections.length - 1;
 
     if (unansweredInPart > 0) {
-      setPendingNextPartIdx(hasNextPart ? activePartIdx + 1 : (hasNextSec ? 0 : null));
       setShowUnansweredWarningModal(true);
       return;
     }
@@ -971,9 +983,9 @@ export default function StudentAttendancePaper({
                   </div>
 
                   {/* USER-SIDE UPLOAD OPTION FOR WRITTEN QUESTION */}
-                  <div className="student-written-attachment-section mt-5 pt-4 border-top">
-                    <div className="flex-align-center gap-3 flex-wrap mb-3">
-                      <label className="form-label font-semibold text-xs text-slate-700 m-0">
+                  <div className="student-written-attachment-section mt-7 pt-6 border-top">
+                    <div className="student-attachment-header-row">
+                      <label className="form-label">
                         Attach Handwritten Paper / Photo Scan:
                       </label>
                       <div>
@@ -1033,9 +1045,9 @@ export default function StudentAttendancePaper({
 
               {/* 3. UPLOAD FILES ANSWER AREA */}
               {(currentQuestion.type === 'upload' || currentQuestion.type === 'upload_paper') && (
-                <div className="student-upload-input-container mt-5 pt-2">
-                  <div className="flex-align-center gap-3.5 flex-wrap mb-4">
-                    <label className="form-label font-semibold text-sm text-slate-800 m-0">
+                <div className="student-written-attachment-section mt-7 pt-6 border-top">
+                  <div className="student-attachment-header-row">
+                    <label className="form-label">
                       Upload Answer Document / Photo:
                     </label>
                     <div>
@@ -1054,9 +1066,9 @@ export default function StudentAttendancePaper({
                       <label
                         htmlFor={`file-input-${currentQuestion.id}`}
                         className="btn btn-upload-mcq-side cursor-pointer"
-                        style={{ padding: '7px 16px', fontSize: '0.85rem' }}
+                        style={{ padding: '6px 14px', fontSize: '0.8rem' }}
                       >
-                        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                           <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
                           <polyline points="17 8 12 3 7 8" />
                           <line x1="12" y1="3" x2="12" y2="15" />
@@ -1067,25 +1079,25 @@ export default function StudentAttendancePaper({
                   </div>
 
                   {Array.isArray(answers[currentQuestion.id]) && answers[currentQuestion.id].length > 0 && (
-                    <div className="uploaded-answers-list mt-4 flex flex-col gap-2.5">
+                    <div className="uploaded-answers-list mt-2 flex flex-col gap-2">
                       {answers[currentQuestion.id].map((fileObj) => (
-                        <div key={fileObj.id} className="uploaded-answer-card flex-between align-center p-3.5 bg-white border rounded-xl shadow-sm">
-                          <div className="flex-align-center gap-3">
-                            <span className={`text-xs font-bold px-2.5 py-1 rounded text-white ${fileObj.type === 'image' ? 'bg-indigo-600' : 'bg-red-600'}`}>
+                        <div key={fileObj.id} className="uploaded-answer-card flex-between align-center p-2.5 bg-slate-50 border rounded-xl shadow-sm">
+                          <div className="flex-align-center gap-2">
+                            <span className={`text-xxs font-bold px-2 py-0.5 rounded text-white ${fileObj.type === 'image' ? 'bg-indigo-600' : 'bg-red-600'}`}>
                               {fileObj.type === 'image' ? 'IMG' : 'PDF'}
                             </span>
                             <a
                               href={fileObj.url}
                               target="_blank"
                               rel="noopener noreferrer"
-                              className="text-sm font-semibold text-primary hover:underline truncate max-w-xs"
+                              className="text-xs font-semibold text-primary hover:underline truncate max-w-xs"
                             >
                               {fileObj.name || 'Answer File'} ↗
                             </a>
                           </div>
                           <button
                             type="button"
-                            className="btn-delete-uploaded text-xs text-danger hover:text-red-800 font-bold px-2.5 py-1 rounded"
+                            className="btn-delete-uploaded text-xs text-danger hover:text-red-800 font-bold px-2 py-0.5 rounded"
                             onClick={() => handleRemoveUploadedFile(currentQuestion.id, fileObj.id)}
                           >
                             Remove

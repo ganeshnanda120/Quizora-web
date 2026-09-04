@@ -354,7 +354,6 @@ export default function StudentActivityScreen({
         participantData={participantValues}
         onSubmit={handleActivitySubmit}
         onExpire={handleSessionExpired}
-        user={user}
       />
     );
   }

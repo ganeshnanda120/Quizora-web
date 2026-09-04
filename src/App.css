@@ -8581,6 +8581,24 @@ img, video, canvas, svg {
 /* WRITTEN ATTACHMENTS & UPLOAD NOTES */
 .student-written-attachment-section {
   border-top: 1px solid #e2e8f0 !important;
+  margin-top: 28px !important;
+  padding-top: 28px !important;
+}
+
+.student-attachment-header-row {
+  display: flex !important;
+  align-items: center !important;
+  gap: 28px !important;
+  flex-wrap: wrap !important;
+  margin-bottom: 14px !important;
+  padding-top: 4px !important;
+}
+
+.student-attachment-header-row .form-label {
+  margin: 0 !important;
+  font-size: 0.85rem !important;
+  font-weight: 600 !important;
+  color: #334155 !important;
 }
 
 .student-upload-notes-box textarea {
