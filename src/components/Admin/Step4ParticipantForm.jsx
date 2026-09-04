@@ -39,13 +39,6 @@ export default function Step4ParticipantForm({
     { id: 'field_name', label: 'Name', isOptional: false, required: true }
   ];
 
-  const handleFieldChange = (index, key, value) => {
-    setError('');
-    const updated = [...participantFields];
-    updated[index] = { ...updated[index], [key]: value };
-    updateFormData({ participantForm: updated });
-  };
-
   const handleToggleOptional = (index, isOptional) => {
     setError('');
     const updated = [...participantFields];
@@ -69,7 +62,7 @@ export default function Step4ParticipantForm({
       return;
     }
 
-    const uniqueId = `field_${Date.now()}_${presetName.toLowerCase().replace(/\s+/g, '_')}`;
+    const uniqueId = `field_${presetName.toLowerCase().replace(/\s+/g, '_')}_${participantFields.length + 1}`;
     const newField = {
       id: uniqueId,
       label: presetName,

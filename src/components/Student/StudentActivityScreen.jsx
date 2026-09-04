@@ -51,6 +51,14 @@ export default function StudentActivityScreen({
     let isMounted = true;
 
     const loadActivity = async () => {
+      if (!activityId) {
+        if (isMounted) {
+          setNotFound(true);
+          setLoading(false);
+        }
+        return;
+      }
+
       setLoading(true);
       try {
         const data = await getActivityById(activityId);
@@ -70,12 +78,7 @@ export default function StudentActivityScreen({
       }
     };
 
-    if (activityId) {
-      loadActivity();
-    } else {
-      setNotFound(true);
-      setLoading(false);
-    }
+    loadActivity();
 
     return () => {
       isMounted = false;

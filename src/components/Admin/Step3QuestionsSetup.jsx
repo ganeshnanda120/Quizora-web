@@ -1,5 +1,4 @@
 import { useState, useEffect } from 'react';
-import { uploadActivityFile } from '../../services/activityService';
 import MCQEditorPage from './MCQEditorPage';
 import WrittenEditorPage from './WrittenEditorPage';
 import UploadEditorPage from './UploadEditorPage';
@@ -34,31 +33,10 @@ export default function Step3QuestionsSetup({
   const [previewActivePartIdx, setPreviewActivePartIdx] = useState(0);
 
   const [error, setError] = useState('');
-  const [fileUploading, setFileUploading] = useState(false);
-
-  // Form states for active question editor
-  const [questionText, setQuestionText] = useState('');
-  const [marks, setMarks] = useState('');
-  const [description, setDescription] = useState('');
-
-  // Image & File attachment states
-  const [questionImageFile, setQuestionImageFile] = useState(null);
-  const [questionImageUrl, setQuestionImageUrl] = useState('');
-  const [paperFile, setPaperFile] = useState(null);
-  const [paperFileUrl, setPaperFileUrl] = useState('');
-  const [paperFileName, setPaperFileName] = useState('');
 
   const isExam = formData.purpose === 'Exam';
 
   const resetQuestionForm = () => {
-    setQuestionText('');
-    setMarks('');
-    setDescription('');
-    setQuestionImageFile(null);
-    setQuestionImageUrl('');
-    setPaperFile(null);
-    setPaperFileUrl('');
-    setPaperFileName('');
     setEditingQuestionIndex(null);
     setEditorMode(null);
     setError('');
@@ -99,159 +77,13 @@ export default function Step3QuestionsSetup({
 
     if (questionToEdit) {
       setEditingQuestionIndex(qIdx);
-      setQuestionText(questionToEdit.questionText || '');
-      setMarks(questionToEdit.marks !== undefined && questionToEdit.marks !== null ? String(questionToEdit.marks) : '');
-      setDescription(questionToEdit.description || '');
-      setQuestionImageUrl(questionToEdit.imageUrl || '');
-      setPaperFileUrl(questionToEdit.paperFileUrl || '');
-      setPaperFileName(questionToEdit.paperFileName || '');
     }
 
     // Push history state so Android Back returns from sub-editor to questions list
     window.history.pushState({ wizardStep: 2, subEditor: type, wizardOpen: true }, '', window.location.href);
   };
 
-  const handlePaperFileChange = (e) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    setError('');
-    const validExtensions = ['.jpg', '.jpeg', '.png', '.pdf'];
-    const lowerName = file.name.toLowerCase();
-    const isValidExt = validExtensions.some((ext) => lowerName.endsWith(ext));
-
-    if (!isValidExt) {
-      setError('Unsupported file format. Please upload JPG, JPEG, PNG, or PDF files only.');
-      return;
-    }
-
-    if (file.size > 15 * 1024 * 1024) {
-      setError('File size must be less than 15MB.');
-      return;
-    }
-
-    setPaperFile(file);
-    setPaperFileName(file.name);
-  };
-
-  const handleQuestionImageChange = (e) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    setError('');
-    if (!file.type.startsWith('image/')) {
-      setError('Please select a valid image file (JPG, PNG).');
-      return;
-    }
-    setQuestionImageFile(file);
-    const preview = URL.createObjectURL(file);
-    setQuestionImageUrl(preview);
-  };
-
-  // Save Question into active section/part
-  const handleSaveQuestion = async () => {
-    setError('');
-
-    if (editorMode !== 'upload_paper' && (!questionText || !questionText.trim())) {
-      setError('Question text is required.');
-      return;
-    }
-
-    if (isExam && (!marks || parseFloat(marks) <= 0)) {
-      setError('Marks are compulsory for Exam activities.');
-      return;
-    }
-
-    if (editorMode === 'upload_paper' && !paperFile && !paperFileUrl) {
-      setError('Please select a question paper file (PDF or Image).');
-      return;
-    }
-
-    setFileUploading(true);
-
-    try {
-      let finalImageUrl = questionImageUrl;
-      let finalPaperUrl = paperFileUrl;
-
-      if (questionImageFile) {
-        finalImageUrl = await uploadActivityFile(activityId, questionImageFile);
-      }
-
-      if (paperFile) {
-        finalPaperUrl = await uploadActivityFile(activityId, paperFile);
-      }
-
-      const isSecMode = partMode === 'sections' && editingSecIdx !== null && editingSecIdx !== undefined;
-
-      const activePartsList = isSecMode
-        ? (sections[editingSecIdx]?.parts || [])
-        : parts;
-
-      const currentPartQuestions = activePartsList[editingPartIndex]?.questions || [];
-
-      const questionObj = {
-        id: editingQuestionIndex !== null ? currentPartQuestions[editingQuestionIndex].id : `q_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
-        type: editorMode,
-        questionText: questionText.trim(),
-        marks: marks ? parseFloat(marks) : null,
-        description: description.trim(),
-        imageUrl: finalImageUrl,
-        paperFileUrl: finalPaperUrl,
-        paperFileName: paperFileName || (paperFile ? paperFile.name : ''),
-        createdAt: new Date().toISOString()
-      };
-
-      if (isSecMode) {
-        const updatedSections = [...sections];
-        const secParts = [...(updatedSections[editingSecIdx]?.parts || [])];
-        const targetPart = secParts[editingPartIndex] || { id: `sec_${editingSecIdx}_p_${editingPartIndex}`, title: `Part ${editingPartIndex + 1}`, questions: [] };
-        const partQuestions = [...(targetPart.questions || [])];
-
-        if (editingQuestionIndex !== null) {
-          partQuestions[editingQuestionIndex] = questionObj;
-        } else {
-          partQuestions.push(questionObj);
-        }
-
-        secParts[editingPartIndex] = {
-          ...targetPart,
-          questions: partQuestions
-        };
-
-        updatedSections[editingSecIdx] = {
-          ...updatedSections[editingSecIdx],
-          parts: secParts
-        };
-
-        updateFormData({ sections: updatedSections });
-      } else {
-        const updatedParts = [...parts];
-        const partQuestions = [...(updatedParts[editingPartIndex]?.questions || [])];
-
-        if (editingQuestionIndex !== null) {
-          partQuestions[editingQuestionIndex] = questionObj;
-        } else {
-          partQuestions.push(questionObj);
-        }
-
-        updatedParts[editingPartIndex] = {
-          ...updatedParts[editingPartIndex],
-          questions: partQuestions
-        };
-
-        updateFormData({ parts: updatedParts });
-      }
-
-      resetQuestionForm();
-    } catch (err) {
-      console.error("Save question error:", err);
-      setError("Failed to save question. Please try again.");
-    } finally {
-      setFileUploading(false);
-    }
-  };
-
-  // Dedicated Save Handler for Full-Screen MCQ Editor
+  // Dedicated Save Handler for Full-Screen Editors (MCQ, Written, Upload)
   const handleSaveMCQQuestion = (questionObj, addMore = false) => {
     const isSecMode = partMode === 'sections' && editingSecIdx !== null && editingSecIdx !== undefined;
 

@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import { uploadStudentAnswerFile } from '../../services/submissionService';
 import logoImg from '../../assets/logo.png';
 
@@ -11,7 +11,6 @@ export default function StudentAttendancePaper({
   user
 }) {
   const partMode = activity?.partMode || 'parts';
-  const isExam = activity?.purpose === 'Exam';
   const enableNegativeMarking = !!activity?.enableNegativeMarking;
 
   // Normal parts list or sections list

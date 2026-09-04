@@ -1,4 +1,4 @@
-import { doc, setDoc, getDoc } from 'firebase/firestore';
+import { doc, setDoc } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { db, storage } from '../firebase';
 
@@ -105,17 +105,9 @@ export const calculateMcqAutoGrades = (activity, answersMap = {}) => {
     }
 
     // Single choice vs multiple choice matching
-    let isCorrect = false;
-    if (Array.isArray(studentAns)) {
-      // Multiple selection
-      const sortedStudent = [...studentAns].sort().join(',');
-      const sortedCorrect = [...correctIndices].sort().join(',');
-      isCorrect = sortedStudent === sortedCorrect;
-    } else {
-      // Single selection
-      const numAns = Number(studentAns);
-      isCorrect = correctIndices.includes(numAns);
-    }
+    const isCorrect = Array.isArray(studentAns)
+      ? [...studentAns].sort().join(',') === [...correctIndices].sort().join(',')
+      : correctIndices.includes(Number(studentAns));
 
     if (isCorrect) {
       correctCount++;
