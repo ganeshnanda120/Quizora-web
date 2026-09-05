@@ -129,7 +129,12 @@ export default function StudentAttendancePaper({
     return [];
   }, [activePart, activity]);
 
-  const currentQuestion = activeQuestions[activeQIdx] || activeQuestions[0];
+  const safeQIdx = useMemo(() => {
+    if (activeQuestions.length === 0) return 0;
+    return Math.min(Math.max(0, activeQIdx), activeQuestions.length - 1);
+  }, [activeQIdx, activeQuestions.length]);
+
+  const currentQuestion = activeQuestions[safeQIdx] || activeQuestions[0];
 
   // Part navigation mode ('sequential' | 'free' | 'individualTime')
   const partNavMode = useMemo(() => {
@@ -796,7 +801,7 @@ export default function StudentAttendancePaper({
               <div className="student-q-header flex-between align-center mb-5 pb-3.5 border-bottom">
                 <div className="student-q-title-group flex-align-center gap-2.5">
                   <span className="student-q-num font-extrabold text-dark text-lg sm:text-xl">
-                    Question {activeQIdx + 1} <span className="text-xs font-normal text-muted">of {activeQuestions.length}</span>
+                    Question {safeQIdx + 1} <span className="text-xs font-normal text-muted">of {activeQuestions.length}</span>
                   </span>
                   <span className={`badge-type-pill text-xs uppercase font-bold ${currentQuestion.type || 'mcq'}`}>
                     {currentQuestion.type === 'written' ? 'Written' : (currentQuestion.type === 'upload' || currentQuestion.type === 'upload_paper') ? 'Upload File' : 'Multiple Choice'}
