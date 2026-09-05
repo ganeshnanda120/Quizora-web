@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { 
   signInWithEmailAndPassword, 
   signInWithPopup, 
+  signInWithRedirect,
   GoogleAuthProvider, 
   sendPasswordResetEmail 
 } from 'firebase/auth';
@@ -30,6 +31,7 @@ export default function Login({ onNavigate }) {
   const getFriendlyErrorMessage = (errorCode) => {
     switch (errorCode) {
       case 'auth/invalid-credential':
+        return 'Invalid credentials or authentication request. Please try again.';
       case 'auth/user-not-found':
       case 'auth/wrong-password':
         return 'Invalid email or password. Please check your credentials.';
@@ -43,6 +45,10 @@ export default function Login({ onNavigate }) {
         return 'Google sign-in popup was closed before completion.';
       case 'auth/popup-blocked':
         return 'Sign-in popup was blocked by your browser.';
+      case 'auth/unauthorized-domain':
+        return 'This domain is not authorized in Firebase. Please check authorized domains.';
+      case 'auth/operation-not-allowed':
+        return 'Google sign-in is not enabled in Firebase console.';
       case 'auth/network-request-failed':
         return 'Network error. Please check your internet connection.';
       default:
@@ -87,14 +93,21 @@ export default function Login({ onNavigate }) {
     setSuccess('');
     setGoogleLoading(true);
     const provider = new GoogleAuthProvider();
+    provider.setCustomParameters({ prompt: 'select_account' });
 
     try {
       await signInWithPopup(auth, provider);
       // Auth listener in App.jsx will handle redirect
     } catch (err) {
-      console.error("Google Sign-In Error:", err);
-      if (err.code !== 'auth/popup-closed-by-user') {
-        setError(getFriendlyErrorMessage(err.code));
+      console.warn("Popup sign-in error, attempting redirect flow for privacy browsers:", err);
+      if (err.code !== 'auth/cancelled-popup-request') {
+        try {
+          await signInWithRedirect(auth, provider);
+          return;
+        } catch (redirectErr) {
+          console.error("Google Sign-In Redirect Error:", redirectErr);
+          setError(getFriendlyErrorMessage(redirectErr.code));
+        }
       }
     } finally {
       setGoogleLoading(false);
