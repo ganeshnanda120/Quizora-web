@@ -21,44 +21,141 @@ export default function StudentAttendancePaper({
     return [];
   };
 
-  // Sections and parts data with resilient extraction
-  const sections = useMemo(() => toArray(activity?.sections), [activity]);
+  // Helper to extract questions from a part/container with stable IDs
+  const extractQuestionsFromPart = (p, prefix = 'q') => {
+    if (!p) return [];
+    const raw = p.questions || p.questionList || p.items || p.questionListObj;
+    const arr = toArray(raw);
+    return arr.map((q, idx) => {
+      if (!q || typeof q !== 'object') return null;
+      const stableId = q.id || `${prefix}_${idx + 1}`;
+      return {
+        ...q,
+        id: stableId,
+        type: q.type || 'mcq',
+        marks: q.marks !== undefined && q.marks !== null ? q.marks : 1
+      };
+    }).filter(Boolean);
+  };
 
-  const rawParts = useMemo(() => {
-    const directParts = toArray(activity?.parts);
-    if (directParts.length > 0) {
-      return directParts.map((p, idx) => ({
-        ...p,
-        id: p.id || `part_${idx + 1}`,
-        title: p.title || `Part ${idx + 1}`,
-        questions: toArray(p.questions || p.questionList || p.items)
-      }));
+  // Determine Activity Architecture Structure
+  const activityStructure = useMemo(() => {
+    if (!activity) return { type: 'empty', hasSections: false, hasMultiParts: false };
+
+    const rawSections = toArray(activity.sections);
+    const validSections = rawSections.filter((sec) => {
+      const parts = toArray(sec.parts);
+      return parts.length > 0 || extractQuestionsFromPart(sec).length > 0;
+    });
+
+    if (validSections.length > 0 && activity.partMode === 'sections') {
+      return { type: 'sections', hasSections: true, hasMultiParts: true };
     }
 
-    const secList = toArray(activity?.sections);
-    if (secList.length > 0) {
+    const rawPartsArr = toArray(activity.parts);
+    if (rawPartsArr.length > 1) {
+      return { type: 'multi_parts', hasSections: false, hasMultiParts: true };
+    }
+
+    if (rawPartsArr.length === 1) {
+      return { type: 'single_part', hasSections: false, hasMultiParts: false };
+    }
+
+    return { type: 'direct_questions', hasSections: false, hasMultiParts: false };
+  }, [activity]);
+
+  // Normalized sections structure (Questions strictly bound to their respective section & part)
+  const sections = useMemo(() => {
+    const rawSections = toArray(activity?.sections);
+    return rawSections.map((sec, sIdx) => {
+      const secParts = toArray(sec.parts).map((p, pIdx) => {
+        const prefix = `sec_${sIdx + 1}_p_${pIdx + 1}`;
+        const pQs = extractQuestionsFromPart(p, prefix);
+        return {
+          ...p,
+          id: p.id || `sec_${sIdx + 1}_p_${pIdx + 1}`,
+          title: p.title || `Part ${pIdx + 1}`,
+          questions: pQs
+        };
+      });
+      return {
+        ...sec,
+        id: sec.id || `sec_${sIdx + 1}`,
+        name: sec.name || `Section ${sIdx + 1}`,
+        parts: secParts
+      };
+    });
+  }, [activity]);
+
+  // Normalized raw parts structure (Multi-part strictly isolates parts; single-part falls back to root if empty)
+  const rawParts = useMemo(() => {
+    const directParts = toArray(activity?.parts);
+    const rootQuestions = toArray(activity?.questions || activity?.questionList || activity?.items).map((q, idx) => {
+      if (!q || typeof q !== 'object') return null;
+      return {
+        ...q,
+        id: q.id || `q_root_${idx + 1}`,
+        type: q.type || 'mcq',
+        marks: q.marks !== undefined && q.marks !== null ? q.marks : 1
+      };
+    }).filter(Boolean);
+
+    // 1. MULTI-PART ACTIVITY (2+ Parts):
+    // Part 1 gets ONLY Part 1's questions, Part 2 gets ONLY Part 2's questions, etc.
+    // NEVER dump root questions or cross-contaminate between parts!
+    if (directParts.length > 1) {
+      return directParts.map((p, pIdx) => {
+        const prefix = `p_${pIdx + 1}`;
+        return {
+          ...p,
+          id: p.id || `part_${pIdx + 1}`,
+          title: p.title || `Part ${pIdx + 1}`,
+          questions: extractQuestionsFromPart(p, prefix)
+        };
+      });
+    }
+
+    // 2. SECTIONS FALLBACK (when sections exist but accessed directly)
+    if (activityStructure.type === 'sections' && sections.length > 0) {
       const flattened = [];
-      secList.forEach((sec, sIdx) => {
-        const secParts = toArray(sec.parts);
-        secParts.forEach((p, pIdx) => {
+      sections.forEach((sec, sIdx) => {
+        (sec.parts || []).forEach((p, pIdx) => {
           flattened.push({
             ...p,
-            id: p.id || `sec_${sIdx}_p_${pIdx}`,
+            id: p.id || `sec_${sIdx + 1}_p_${pIdx + 1}`,
             title: p.title || `${sec.name || `Section ${sIdx + 1}`} - Part ${pIdx + 1}`,
-            questions: toArray(p.questions || p.questionList || p.items)
+            questions: p.questions || []
           });
         });
       });
       if (flattened.length > 0) return flattened;
     }
 
-    const rootQs = toArray(activity?.questions || activity?.questionList);
-    if (rootQs.length > 0) {
-      return [{ id: 'part_1', title: 'Part 1', questions: rootQs }];
+    // 3. SINGLE-PART ACTIVITY (Exactly 1 Part):
+    // If the single part has questions, use them. Only if empty, fallback to root-level questions.
+    if (directParts.length === 1) {
+      const p = directParts[0];
+      const partQs = extractQuestionsFromPart(p, 'p_1');
+      const finalQuestions = partQs.length > 0 ? partQs : rootQuestions;
+      return [
+        {
+          ...p,
+          id: p.id || 'part_1',
+          title: p.title || 'Part 1',
+          questions: finalQuestions
+        }
+      ];
     }
 
-    return [];
-  }, [activity]);
+    // 4. DIRECT QUESTIONS (No Parts array defined)
+    return [
+      {
+        id: 'part_1',
+        title: 'Part 1',
+        questions: rootQuestions
+      }
+    ];
+  }, [activity, activityStructure, sections]);
 
   // Session storage key
   const cacheKey = `quizora_active_session_${activityId}`;
@@ -150,61 +247,54 @@ export default function StudentAttendancePaper({
   }, [partMode, sections, activeSecIdx]);
 
   const activePartsList = useMemo(() => {
-    if (partMode === 'sections' && activeSection?.parts) {
-      const secParts = toArray(activeSection.parts);
-      if (secParts.length > 0) return secParts;
+    if (partMode === 'sections' && activeSection?.parts && activeSection.parts.length > 0) {
+      return activeSection.parts;
     }
     return rawParts;
   }, [partMode, activeSection, rawParts]);
 
   const activePart = useMemo(() => {
-    return activePartsList[activePartIdx] || activePartsList[0] || { questions: [] };
+    return activePartsList[activePartIdx] || activePartsList[0] || { id: 'part_1', title: 'Part 1', questions: [] };
   }, [activePartsList, activePartIdx]);
 
-  // Total questions list across all parts and sections
+  // Total questions list across all parts and sections (Preserves all legitimate questions with unique keys)
   const allQuestionsList = useMemo(() => {
     const list = [];
-    if (partMode === 'sections' && sections.length > 0) {
-      sections.forEach((sec, sI) => {
-        toArray(sec.parts).forEach((p, pI) => {
-          toArray(p.questions || p.questionList).forEach((q) => {
-            list.push({ ...q, secIdx: sI, partIdx: pI, partTitle: p.title || `Part ${pI + 1}`, secName: sec.name || `Section ${sI + 1}` });
+    const seenIds = new Set();
+
+    const addQuestion = (q, fallbackId) => {
+      if (!q || typeof q !== 'object') return;
+      let qId = q.id || fallbackId;
+      if (seenIds.has(qId)) {
+        qId = `${qId}_${list.length + 1}`;
+      }
+      seenIds.add(qId);
+      list.push({ ...q, id: qId });
+    };
+
+    if (activityStructure.type === 'sections' && sections.length > 0) {
+      sections.forEach((sec, sIdx) => {
+        (sec.parts || []).forEach((p, pIdx) => {
+          (p.questions || []).forEach((q, qIdx) => {
+            addQuestion(q, `sec_${sIdx + 1}_p_${pIdx + 1}_q_${qIdx + 1}`);
           });
         });
       });
     } else {
-      rawParts.forEach((p, pI) => {
-        toArray(p.questions || p.questionList).forEach((q) => {
-          list.push({ ...q, partIdx: pI, partTitle: p.title || `Part ${pI + 1}` });
+      rawParts.forEach((p, pIdx) => {
+        (p.questions || []).forEach((q, qIdx) => {
+          addQuestion(q, `p_${pIdx + 1}_q_${qIdx + 1}`);
         });
       });
     }
-    if (list.length === 0) {
-      const rootQs = toArray(activity?.questions || activity?.questionList);
-      rootQs.forEach((q) => list.push(q));
-    }
-    return list;
-  }, [partMode, sections, rawParts, activity]);
 
+    return list;
+  }, [activityStructure, sections, rawParts]);
+
+  // Active Questions for current part (Strictly isolates questions belonging to this Part ONLY)
   const activeQuestions = useMemo(() => {
-    const partQs = toArray(activePart?.questions);
-    if (partQs.length > 0) {
-      return partQs;
-    }
-    const rootQs = toArray(activity?.questions);
-    if (rootQs.length > 0) {
-      return rootQs;
-    }
-    // Fallback: if activePart is empty but other parts have questions, find first non-empty part
-    const firstNonEmpty = rawParts.find((p) => toArray(p.questions).length > 0);
-    if (firstNonEmpty) {
-      return toArray(firstNonEmpty.questions);
-    }
-    if (allQuestionsList.length > 0) {
-      return allQuestionsList;
-    }
-    return [];
-  }, [activePart, activity, rawParts, allQuestionsList]);
+    return toArray(activePart?.questions);
+  }, [activePart]);
 
   const safeQIdx = useMemo(() => {
     if (activeQuestions.length === 0) return 0;
@@ -213,14 +303,15 @@ export default function StudentAttendancePaper({
 
   const currentQuestion = activeQuestions[safeQIdx] || activeQuestions[0];
 
-  // Temporary Diagnostic Logging (Step 10)
+  // Diagnostic Logging
   useEffect(() => {
-    console.log('[Quizora Debug] Activity ID from URL:', activityId);
-    console.log('[Quizora Debug] Loaded Activity ID:', activity?.activityId || activityId);
-    console.log('[Quizora Debug] Current Part Index:', activePartIdx);
-    console.log('[Quizora Debug] Total Questions in Activity:', allQuestionsList.length);
-    console.log('[Quizora Debug] Questions in Active Part:', activeQuestions.length);
-  }, [activityId, activity, activePartIdx, allQuestionsList.length, activeQuestions.length]);
+    console.log('[QUIZORA DEBUG] Activity ID loaded:', activity?.activityId || activityId);
+    console.log('[QUIZORA DEBUG] Activity Structure:', activityStructure.type);
+    console.log('[QUIZORA DEBUG] Total questions fetched:', allQuestionsList.length);
+    console.log('[QUIZORA DEBUG] Current Part ID:', activePart?.id || 'none');
+    console.log('[QUIZORA DEBUG] Current Part Index:', activePartIdx);
+    console.log('[QUIZORA DEBUG] Part questions count:', activeQuestions.length);
+  }, [activityId, activity, activityStructure, activePart, activePartIdx, allQuestionsList, activeQuestions]);
 
   // Part navigation mode ('sequential' | 'free' | 'individualTime')
   const partNavMode = useMemo(() => {
