@@ -206,6 +206,7 @@ export default function WrittenEditorPage({
         id: questionToEdit?.id || `q_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
         type: 'written',
         questionText: questionText.trim(),
+        marks: marks ? parseFloat(marks) : null,
         answerRequired: questionToEdit?.answerRequired !== false,
         answerGuidelines: answerGuidelines.trim(),
         description: answerGuidelines.trim(),
