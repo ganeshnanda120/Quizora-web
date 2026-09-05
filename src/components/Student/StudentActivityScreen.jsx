@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { getActivityById } from '../../services/activityService';
 import { submitStudentActivity } from '../../services/submissionService';
+import { syncServerTime, getSynchronizedTime, parseActivityTime } from '../../services/timeSyncService';
 import StudentAttendancePaper from './StudentAttendancePaper';
 import StudentSubmissionResult from './StudentSubmissionResult';
 import logoImg from '../../assets/logo.png';
@@ -35,15 +36,29 @@ export default function StudentActivityScreen({
   });
   const [formErrors, setFormErrors] = useState({});
 
-  // Clock state synced per second for live countdowns
-  const [currentTime, setCurrentTime] = useState(() => new Date());
+  // Real-time synchronized clock state (epoch milliseconds)
+  const [syncedTimestamp, setSyncedTimestamp] = useState(() => getSynchronizedTime());
 
-  // Tick clock every second
+  // Synchronize server time on mount and periodically
   useEffect(() => {
-    const interval = setInterval(() => {
-      setCurrentTime(new Date());
+    syncServerTime().then(() => {
+      setSyncedTimestamp(getSynchronizedTime());
+    });
+
+    // Re-sync with server every 45 seconds for precision
+    const syncInterval = setInterval(() => {
+      syncServerTime();
+    }, 45000);
+
+    // Live tick every second
+    const tickInterval = setInterval(() => {
+      setSyncedTimestamp(getSynchronizedTime());
     }, 1000);
-    return () => clearInterval(interval);
+
+    return () => {
+      clearInterval(syncInterval);
+      clearInterval(tickInterval);
+    };
   }, []);
 
   // Fetch Activity document
@@ -85,32 +100,39 @@ export default function StudentActivityScreen({
     };
   }, [activityId]);
 
-  // Compute activity status based on start/end times
+  // Compute absolute start & end timestamps in epoch ms
+  const startMs = useMemo(() => {
+    if (!activity) return null;
+    return activity.startTimeMs || parseActivityTime(activity.startTime, activity);
+  }, [activity]);
+
+  const endMs = useMemo(() => {
+    if (!activity) return null;
+    return activity.endTimeMs || parseActivityTime(activity.endTime, activity);
+  }, [activity]);
+
+  // Compute activity status based on start/end times synced across all devices
   const activityStatus = useMemo(() => {
     if (!activity) return 'UNKNOWN';
 
-    const now = currentTime.getTime();
-    const startTime = activity.startTime ? new Date(activity.startTime).getTime() : null;
-    const endTime = activity.endTime ? new Date(activity.endTime).getTime() : null;
+    const now = syncedTimestamp;
 
-    if (startTime && now < startTime) {
+    if (startMs && now < startMs) {
       return 'NOT_STARTED';
     }
 
-    if (endTime && now >= endTime) {
+    if (endMs && now >= endMs) {
       return 'EXPIRED';
     }
 
     return 'ACTIVE';
-  }, [activity, currentTime]);
+  }, [activity, syncedTimestamp, startMs, endMs]);
 
-  // Calculate Countdown to Start Time (DD : HH : MM : SS)
+  // Calculate Countdown to Start Time (DD : HH : MM : SS) - Identical for all devices
   const startCountdown = useMemo(() => {
-    if (!activity?.startTime) return { days: '00', hours: '00', minutes: '00', seconds: '00', totalSec: 0 };
+    if (!startMs) return { days: '00', hours: '00', minutes: '00', seconds: '00', totalSec: 0 };
 
-    const startMs = new Date(activity.startTime).getTime();
-    const nowMs = currentTime.getTime();
-    const diffSec = Math.max(0, Math.floor((startMs - nowMs) / 1000));
+    const diffSec = Math.max(0, Math.floor((startMs - syncedTimestamp) / 1000));
 
     const days = Math.floor(diffSec / 86400);
     const hours = Math.floor((diffSec % 86400) / 3600);
@@ -125,7 +147,7 @@ export default function StudentActivityScreen({
       seconds: pad(seconds),
       totalSec: diffSec
     };
-  }, [activity, currentTime]);
+  }, [startMs, syncedTimestamp]);
 
   // Format Dates
   const formatDisplayDateTime = (dateStr) => {

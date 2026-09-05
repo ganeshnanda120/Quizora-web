@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import { uploadStudentAnswerFile } from '../../services/submissionService';
+import { getSynchronizedTime, parseActivityTime } from '../../services/timeSyncService';
 import logoImg from '../../assets/logo.png';
 
 export default function StudentAttendancePaper({
@@ -175,41 +176,42 @@ export default function StudentAttendancePaper({
     }
   }, [answers, onSubmit, onExpire]);
 
-  const activityEndTime = activity?.endTime;
+  const activityEndTimeMs = useMemo(() => {
+    if (!activity) return null;
+    return activity.endTimeMs || parseActivityTime(activity.endTime, activity);
+  }, [activity]);
 
-  // Calculate Global Seconds Remaining (monotonic against real clock)
+  // Calculate Global Seconds Remaining (monotonic against real synchronized clock)
   const globalSecondsRemaining = useMemo(() => {
-    if (activityEndTime) {
-      const endMs = new Date(activityEndTime).getTime();
-      return Math.max(0, Math.floor((endMs - currentTime) / 1000));
+    if (activityEndTimeMs) {
+      return Math.max(0, Math.floor((activityEndTimeMs - currentTime) / 1000));
     }
     if (totalDurationSec !== null) {
       const elapsed = Math.floor((currentTime - sessionStartTime) / 1000);
       return Math.max(0, totalDurationSec - elapsed);
     }
     return null;
-  }, [activityEndTime, totalDurationSec, currentTime, sessionStartTime]);
+  }, [activityEndTimeMs, totalDurationSec, currentTime, sessionStartTime]);
 
   // Individual Part Time Remaining calculation
   const partSecondsRemaining = useMemo(() => {
     if (partNavMode !== 'individualTime' || !activePart) return null;
-    if (activePart.individualEndTime) {
-      const endMs = new Date(activePart.individualEndTime).getTime();
-      return Math.max(0, Math.floor((endMs - currentTime) / 1000));
+    const partEndMs = activePart.individualEndTimeMs || parseActivityTime(activePart.individualEndTime, activity);
+    if (partEndMs) {
+      return Math.max(0, Math.floor((partEndMs - currentTime) / 1000));
     }
     return null;
-  }, [partNavMode, activePart, currentTime]);
+  }, [partNavMode, activePart, activity, currentTime]);
 
-  // Tick clock every second
+  // Tick clock every second with synchronized timestamp
   useEffect(() => {
     const interval = setInterval(() => {
-      const now = Date.now();
+      const now = getSynchronizedTime();
       setCurrentTime(now);
 
       // Check global time expiration
-      if (activity?.endTime) {
-        const endMs = new Date(activity.endTime).getTime();
-        if (now >= endMs) {
+      if (activityEndTimeMs) {
+        if (now >= activityEndTimeMs) {
           clearInterval(interval);
           handleAutoExpireSubmit();
         }
@@ -223,7 +225,7 @@ export default function StudentAttendancePaper({
     }, 1000);
 
     return () => clearInterval(interval);
-  }, [activity?.endTime, totalDurationSec, sessionStartTime, handleAutoExpireSubmit]);
+  }, [activityEndTimeMs, totalDurationSec, sessionStartTime, handleAutoExpireSubmit]);
 
   // Format seconds as MM:SS or HH:MM:SS
   const formatTimer = (sec) => {
@@ -300,9 +302,9 @@ export default function StudentAttendancePaper({
     const targetList = partMode === 'sections' ? (sections[sIdx]?.parts || []) : rawParts;
     const targetPart = targetList[pIdx];
     if (!targetPart?.individualStartTime) return true;
-    const startMs = new Date(targetPart.individualStartTime).getTime();
+    const startMs = targetPart.individualStartTimeMs || parseActivityTime(targetPart.individualStartTime, activity);
     return currentTime >= startMs;
-  }, [partNavMode, partMode, sections, rawParts, activeSecIdx, currentTime]);
+  }, [partNavMode, partMode, sections, rawParts, activeSecIdx, currentTime, activity]);
 
   // Check if a Part is submitted/locked in individualTime mode
   const isPartSubmitted = useCallback((pIdx, sIdx = activeSecIdx) => {
