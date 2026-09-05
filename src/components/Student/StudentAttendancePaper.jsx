@@ -13,15 +13,50 @@ export default function StudentAttendancePaper({
   const partMode = activity?.partMode || 'parts';
   const enableNegativeMarking = !!activity?.enableNegativeMarking;
 
-  // Sections and parts data
-  const sections = useMemo(() => activity?.sections || [], [activity]);
+  // Universal Array Normalizer for Firestore maps vs Arrays
+  const toArray = (val) => {
+    if (!val) return [];
+    if (Array.isArray(val)) return val;
+    if (typeof val === 'object') return Object.values(val);
+    return [];
+  };
+
+  // Sections and parts data with resilient extraction
+  const sections = useMemo(() => toArray(activity?.sections), [activity]);
+
   const rawParts = useMemo(() => {
-    if (Array.isArray(activity?.parts) && activity.parts.length > 0) {
-      return activity.parts;
+    const directParts = toArray(activity?.parts);
+    if (directParts.length > 0) {
+      return directParts.map((p, idx) => ({
+        ...p,
+        id: p.id || `part_${idx + 1}`,
+        title: p.title || `Part ${idx + 1}`,
+        questions: toArray(p.questions || p.questionList || p.items)
+      }));
     }
-    if (Array.isArray(activity?.questions) && activity.questions.length > 0) {
-      return [{ id: 'part_1', title: 'Part 1', questions: activity.questions }];
+
+    const secList = toArray(activity?.sections);
+    if (secList.length > 0) {
+      const flattened = [];
+      secList.forEach((sec, sIdx) => {
+        const secParts = toArray(sec.parts);
+        secParts.forEach((p, pIdx) => {
+          flattened.push({
+            ...p,
+            id: p.id || `sec_${sIdx}_p_${pIdx}`,
+            title: p.title || `${sec.name || `Section ${sIdx + 1}`} - Part ${pIdx + 1}`,
+            questions: toArray(p.questions || p.questionList || p.items)
+          });
+        });
+      });
+      if (flattened.length > 0) return flattened;
     }
+
+    const rootQs = toArray(activity?.questions || activity?.questionList);
+    if (rootQs.length > 0) {
+      return [{ id: 'part_1', title: 'Part 1', questions: rootQs }];
+    }
+
     return [];
   }, [activity]);
 
@@ -108,26 +143,68 @@ export default function StudentAttendancePaper({
 
   // Determine active section and parts list
   const activeSection = useMemo(() => {
-    return partMode === 'sections' ? (sections[activeSecIdx] || sections[0]) : null;
+    if (partMode === 'sections' && sections.length > 0) {
+      return sections[activeSecIdx] || sections[0];
+    }
+    return null;
   }, [partMode, sections, activeSecIdx]);
 
   const activePartsList = useMemo(() => {
-    return partMode === 'sections' ? (activeSection?.parts || []) : rawParts;
+    if (partMode === 'sections' && activeSection?.parts) {
+      const secParts = toArray(activeSection.parts);
+      if (secParts.length > 0) return secParts;
+    }
+    return rawParts;
   }, [partMode, activeSection, rawParts]);
 
   const activePart = useMemo(() => {
     return activePartsList[activePartIdx] || activePartsList[0] || { questions: [] };
   }, [activePartsList, activePartIdx]);
 
-  const activeQuestions = useMemo(() => {
-    if (Array.isArray(activePart?.questions) && activePart.questions.length > 0) {
-      return activePart.questions;
+  // Total questions list across all parts and sections
+  const allQuestionsList = useMemo(() => {
+    const list = [];
+    if (partMode === 'sections' && sections.length > 0) {
+      sections.forEach((sec, sI) => {
+        toArray(sec.parts).forEach((p, pI) => {
+          toArray(p.questions || p.questionList).forEach((q) => {
+            list.push({ ...q, secIdx: sI, partIdx: pI, partTitle: p.title || `Part ${pI + 1}`, secName: sec.name || `Section ${sI + 1}` });
+          });
+        });
+      });
+    } else {
+      rawParts.forEach((p, pI) => {
+        toArray(p.questions || p.questionList).forEach((q) => {
+          list.push({ ...q, partIdx: pI, partTitle: p.title || `Part ${pI + 1}` });
+        });
+      });
     }
-    if (Array.isArray(activity?.questions) && activity.questions.length > 0) {
-      return activity.questions;
+    if (list.length === 0) {
+      const rootQs = toArray(activity?.questions || activity?.questionList);
+      rootQs.forEach((q) => list.push(q));
+    }
+    return list;
+  }, [partMode, sections, rawParts, activity]);
+
+  const activeQuestions = useMemo(() => {
+    const partQs = toArray(activePart?.questions);
+    if (partQs.length > 0) {
+      return partQs;
+    }
+    const rootQs = toArray(activity?.questions);
+    if (rootQs.length > 0) {
+      return rootQs;
+    }
+    // Fallback: if activePart is empty but other parts have questions, find first non-empty part
+    const firstNonEmpty = rawParts.find((p) => toArray(p.questions).length > 0);
+    if (firstNonEmpty) {
+      return toArray(firstNonEmpty.questions);
+    }
+    if (allQuestionsList.length > 0) {
+      return allQuestionsList;
     }
     return [];
-  }, [activePart, activity]);
+  }, [activePart, activity, rawParts, allQuestionsList]);
 
   const safeQIdx = useMemo(() => {
     if (activeQuestions.length === 0) return 0;
@@ -135,6 +212,15 @@ export default function StudentAttendancePaper({
   }, [activeQIdx, activeQuestions.length]);
 
   const currentQuestion = activeQuestions[safeQIdx] || activeQuestions[0];
+
+  // Temporary Diagnostic Logging (Step 10)
+  useEffect(() => {
+    console.log('[Quizora Debug] Activity ID from URL:', activityId);
+    console.log('[Quizora Debug] Loaded Activity ID:', activity?.activityId || activityId);
+    console.log('[Quizora Debug] Current Part Index:', activePartIdx);
+    console.log('[Quizora Debug] Total Questions in Activity:', allQuestionsList.length);
+    console.log('[Quizora Debug] Questions in Active Part:', activeQuestions.length);
+  }, [activityId, activity, activePartIdx, allQuestionsList.length, activeQuestions.length]);
 
   // Part navigation mode ('sequential' | 'free' | 'individualTime')
   const partNavMode = useMemo(() => {
@@ -145,27 +231,6 @@ export default function StudentAttendancePaper({
   }, [partMode, activeSection, activity]);
 
   const isMultiPart = activePartsList.length > 1 || (partMode === 'sections' && sections.length > 1);
-
-  // Total questions list across all parts
-  const allQuestionsList = useMemo(() => {
-    const list = [];
-    if (partMode === 'sections') {
-      sections.forEach((sec, sI) => {
-        (sec.parts || []).forEach((p, pI) => {
-          (p.questions || []).forEach((q) => {
-            list.push({ ...q, secIdx: sI, partIdx: pI, partTitle: p.title || `Part ${pI + 1}`, secName: sec.name || `Section ${sI + 1}` });
-          });
-        });
-      });
-    } else {
-      rawParts.forEach((p, pI) => {
-        (p.questions || []).forEach((q) => {
-          list.push({ ...q, partIdx: pI, partTitle: p.title || `Part ${pI + 1}` });
-        });
-      });
-    }
-    return list;
-  }, [partMode, sections, rawParts]);
 
   // Auto-expire handler
   const handleAutoExpireSubmit = useCallback(async () => {
