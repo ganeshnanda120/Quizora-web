@@ -15,6 +15,9 @@ export default function UploadEditorPage({
   const isExam = formData?.purpose === 'Exam';
 
   // Form states
+  const [questionText, setQuestionText] = useState(
+    questionToEdit?.questionText || ''
+  );
   const [marks, setMarks] = useState(
     questionToEdit?.marks !== undefined && questionToEdit?.marks !== null
       ? String(questionToEdit.marks)
@@ -59,6 +62,7 @@ export default function UploadEditorPage({
 
   // Reset form state to add another question
   const resetFormState = () => {
+    setQuestionText('');
     setMarks('');
     setAnswerGuidelines('');
     setAttachedFiles([]);
@@ -214,6 +218,7 @@ export default function UploadEditorPage({
       const questionObj = {
         id: questionToEdit?.id || `q_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
         type: 'upload',
+        questionText: questionText ? questionText.trim() : (firstFile?.name ? `Question Document: ${firstFile.name}` : 'Uploaded Question File'),
         marks: marks ? parseFloat(marks) : null,
         answerGuidelines: answerGuidelines.trim(),
         description: answerGuidelines.trim(),
@@ -304,8 +309,25 @@ export default function UploadEditorPage({
         )}
 
         <div className="mcq-form-card">
-          {/* CARD 1: MARKS CONFIGURATION */}
+          {/* CARD 1: QUESTION DETAILS & MARKS CONFIGURATION */}
           <div className="mcq-section-card">
+            <div className="form-group mb-4">
+              <label className="form-label font-bold text-sm block mb-1" htmlFor="upload-question-title">
+                Question Title / Instruction <span className="optional-tag font-normal">(Optional)</span>
+              </label>
+              <input
+                type="text"
+                id="upload-question-title"
+                className="form-input"
+                placeholder="e.g. Question Paper / Answer the following questions from the document"
+                value={questionText}
+                onChange={(e) => {
+                  setError('');
+                  setQuestionText(e.target.value);
+                }}
+              />
+            </div>
+
             <div className="form-group mb-0" style={{ maxWidth: '240px' }}>
               <label className="form-label font-semibold text-sm" htmlFor="upload-marks">
                 Marks {isExam ? <span className="req-star">*</span> : <span className="optional-tag">(Optional)</span>}
@@ -324,7 +346,6 @@ export default function UploadEditorPage({
                     setMarks(val);
                   }
                 }}
-                autoFocus
               />
             </div>
           </div>

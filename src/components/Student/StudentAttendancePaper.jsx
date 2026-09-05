@@ -14,7 +14,15 @@ export default function StudentAttendancePaper({
 
   // Sections and parts data
   const sections = useMemo(() => activity?.sections || [], [activity]);
-  const rawParts = useMemo(() => activity?.parts || [], [activity]);
+  const rawParts = useMemo(() => {
+    if (Array.isArray(activity?.parts) && activity.parts.length > 0) {
+      return activity.parts;
+    }
+    if (Array.isArray(activity?.questions) && activity.questions.length > 0) {
+      return [{ id: 'part_1', title: 'Part 1', questions: activity.questions }];
+    }
+    return [];
+  }, [activity]);
 
   // Session storage key
   const cacheKey = `quizora_active_session_${activityId}`;
@@ -111,8 +119,14 @@ export default function StudentAttendancePaper({
   }, [activePartsList, activePartIdx]);
 
   const activeQuestions = useMemo(() => {
-    return activePart?.questions || [];
-  }, [activePart]);
+    if (Array.isArray(activePart?.questions) && activePart.questions.length > 0) {
+      return activePart.questions;
+    }
+    if (Array.isArray(activity?.questions) && activity.questions.length > 0) {
+      return activity.questions;
+    }
+    return [];
+  }, [activePart, activity]);
 
   const currentQuestion = activeQuestions[activeQIdx] || activeQuestions[0];
 
@@ -805,10 +819,14 @@ export default function StudentAttendancePaper({
               </div>
 
               {/* Question Prompt */}
-              {currentQuestion.questionText && (
+              {(currentQuestion.questionText || currentQuestion.type === 'upload' || currentQuestion.type === 'upload_paper') && (
                 <div className="student-q-prompt mb-5">
                   <p className="student-q-text font-medium text-base sm:text-lg text-dark leading-relaxed m-0">
-                    {currentQuestion.questionText}
+                    {currentQuestion.questionText || (
+                      currentQuestion.fileName || currentQuestion.paperFileName
+                        ? `Question Document: ${currentQuestion.fileName || currentQuestion.paperFileName}`
+                        : 'Please review the attached question document below and submit your answers.'
+                    )}
                   </p>
                 </div>
               )}

@@ -365,18 +365,18 @@ export default function StudentActivityScreen({
     return (
       <div className="student-access-viewport fade-in">
         <div className="student-access-container">
-          <div className="access-brand-header text-center mb-5">
+          <div className="access-brand-header">
             <img src={logoImg} alt="Quizora" className="access-brand-logo" />
             <h2 className="access-brand-title">Quizora</h2>
           </div>
 
-          <div className="access-status-card bg-white p-7 rounded-2xl shadow-lg border border-slate-100">
-            <div className="participant-form-header text-center mb-5">
-              <span className="badge badge-primary text-xs uppercase font-bold tracking-wider mb-2 inline-block">
+          <div className="access-status-card">
+            <div className="participant-form-header">
+              <span className="activity-purpose-label">
                 Participant Details
               </span>
-              <h3 className="text-xl font-bold text-dark m-0">{activity.title}</h3>
-              <p className="text-xs text-muted mt-1">
+              <h3 className="participant-form-title">{activity.title}</h3>
+              <p className="access-status-message">
                 Please enter your identification details below to proceed to your {activity.purpose || 'activity'}.
               </p>
             </div>
@@ -386,7 +386,7 @@ export default function StudentActivityScreen({
                 e.preventDefault();
                 handleStartExamFlow();
               }}
-              className="student-form-fields-stack flex flex-col gap-4"
+              className="student-form-fields-stack"
             >
               {fields.map((f, idx) => {
                 const isRequired = f.isOptional !== true;
@@ -407,7 +407,7 @@ export default function StudentActivityScreen({
                     <input
                       type="text"
                       className={`form-input ${err ? 'input-error' : ''}`}
-                      placeholder={`Enter your ${f.label.toLowerCase()}...`}
+                      placeholder={`Enter your ${(f.label || 'details').toLowerCase()}...`}
                       value={participantValues[fieldKey] || ''}
                       onChange={(e) => handleParticipantChange(fieldKey, e.target.value)}
                     />
@@ -416,9 +416,13 @@ export default function StudentActivityScreen({
                 );
               })}
 
-              <div className="participant-form-actions flex flex-col gap-2 mt-3">
-                <button type="submit" className="btn btn-primary btn-lg w-full font-bold">
-                  <span>Enter &amp; Start Questions &rarr;</span>
+              <div className="participant-form-actions">
+                <button type="submit" className="btn-start-active">
+                  <span>Enter &amp; Start Questions</span>
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                    <line x1="5" y1="12" x2="19" y2="12" />
+                    <polyline points="12 5 19 12 12 19" />
+                  </svg>
                 </button>
                 <button
                   type="button"
@@ -440,47 +444,61 @@ export default function StudentActivityScreen({
     return (
       <div className="student-access-viewport fade-in">
         <div className="student-access-container">
-          <div className="access-brand-header text-center mb-6">
+          <div className="access-brand-header">
             <img src={logoImg} alt="Quizora" className="access-brand-logo" />
             <h2 className="access-brand-title">Quizora</h2>
           </div>
 
-          <div className="access-status-card not-started-card bg-white p-8 rounded-2xl shadow-lg border border-slate-100 text-center">
+          <div className="access-status-card not-started-card">
             {/* STATUS BADGE */}
-            <div className="status-badge-header not-started-badge mb-4">
-              <span className="status-badge-pill-not-started">🕐 NOT STARTED YET</span>
+            <div className="status-badge-header not-started-badge">
+              <span className="status-badge-pill-not-started">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <circle cx="12" cy="12" r="10" />
+                  <polyline points="12 6 12 12 16 14" />
+                </svg>
+                <span>NOT STARTED YET</span>
+              </span>
             </div>
 
-            <p className="access-status-message text-sm text-muted font-medium mb-4">
+            <p className="access-status-message">
               This activity has not started yet.
             </p>
 
             {/* ACTIVITY INFO */}
-            <div className="activity-info-box mb-6">
-              <span className="activity-purpose-label text-xs uppercase font-bold text-primary tracking-wider block mb-1">
-                {activity.purpose || 'Exam / Assignment'}
+            <div className="activity-info-box">
+              <span className="activity-purpose-label">
+                {activity.purpose || 'Exam'}
               </span>
-              <h2 className="activity-title-headline font-extrabold text-2xl text-dark mb-2">
+              <h2 className="activity-title-headline">
                 {activity.title}
               </h2>
               {activity.subject && (
-                <span className="badge badge-secondary text-xs">
+                <span className="activity-subject-badge">
                   Subject: {activity.subject}
                 </span>
               )}
             </div>
 
             {/* SCHEDULE TIME */}
-            <div className="scheduled-time-card p-3 bg-slate-50 border rounded-xl mb-6 text-center">
-              <span className="text-xs font-semibold text-muted block mb-1">Starts on:</span>
-              <span className="text-sm font-bold text-dark block">
+            <div className="scheduled-time-card">
+              <span className="scheduled-time-label">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
+                  <line x1="16" y1="2" x2="16" y2="6" />
+                  <line x1="8" y1="2" x2="8" y2="6" />
+                  <line x1="3" y1="10" x2="21" y2="10" />
+                </svg>
+                Starts on
+              </span>
+              <span className="scheduled-time-value">
                 {formatDisplayDateTime(activity.startTime)}
               </span>
             </div>
 
-            {/* LIVE COUNTDOWN DISPLAY (DD : HH : MM : SS) */}
-            <div className="live-countdown-section mb-6">
-              <span className="countdown-label-title text-xs font-bold uppercase tracking-widest text-muted block mb-2">
+            {/* LIVE COUNTDOWN DISPLAY (DD : HH : MM : SEC) */}
+            <div className="live-countdown-section">
+              <span className="countdown-label-title">
                 STARTS IN
               </span>
 
@@ -510,17 +528,21 @@ export default function StudentActivityScreen({
               </div>
             </div>
 
-            {/* START BUTTON (DISABLED IN NOT STARTED STATE) */}
+            {/* START BUTTON (LOCKED IN NOT STARTED STATE) */}
             <button
               type="button"
-              className="btn btn-primary btn-lg w-full disabled cursor-not-allowed opacity-60 mb-3"
+              className="btn-start-disabled"
               disabled
             >
-              Start Activity
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+                <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+              </svg>
+              <span>Start Activity</span>
             </button>
 
-            <p className="text-xs text-muted m-0">
-              Activity will be available when the scheduled time begins.
+            <p className="access-footer-hint">
+              Activity will unlock automatically when the scheduled time begins.
             </p>
           </div>
         </div>
@@ -532,45 +554,55 @@ export default function StudentActivityScreen({
   return (
     <div className="student-access-viewport fade-in">
       <div className="student-access-container">
-        <div className="access-brand-header text-center mb-6">
+        <div className="access-brand-header">
           <img src={logoImg} alt="Quizora" className="access-brand-logo" />
           <h2 className="access-brand-title">Quizora</h2>
         </div>
 
-        <div className="access-status-card active-card bg-white p-8 rounded-2xl shadow-lg border border-slate-100 text-center">
+        <div className="access-status-card active-card">
           {/* ACTIVE STATUS BADGE */}
-          <div className="status-badge-header active-badge mb-4">
-            <span className="status-badge-pill-active">🟢 ACTIVE</span>
+          <div className="status-badge-header active-badge">
+            <span className="status-badge-pill-active">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+                <circle cx="12" cy="12" r="8" />
+              </svg>
+              <span>ACTIVE NOW</span>
+            </span>
           </div>
 
-          <h2 className="activity-title-headline font-extrabold text-2xl text-dark mb-4">
-            {activity.title}
-          </h2>
+          <div className="activity-info-box">
+            <span className="activity-purpose-label">
+              {activity.purpose || 'Exam'}
+            </span>
+            <h2 className="activity-title-headline">
+              {activity.title}
+            </h2>
+          </div>
 
           {/* ACTIVITY SUMMARY DETAILS */}
-          <div className="active-details-box p-4 bg-slate-50 border rounded-xl text-left mb-6">
+          <div className="active-details-box">
             {activity.subject && (
-              <div className="info-detail-row flex-between py-2 border-bottom">
+              <div className="info-detail-row">
                 <span className="text-xs font-semibold text-muted">Subject</span>
                 <span className="text-xs font-bold text-dark">{activity.subject}</span>
               </div>
             )}
 
             {activity.totalMarks && (
-              <div className="info-detail-row flex-between py-2 border-bottom">
+              <div className="info-detail-row">
                 <span className="text-xs font-semibold text-muted">Total Marks</span>
-                <span className="text-xs font-bold text-primary">{activity.totalMarks}</span>
+                <span className="text-xs font-bold text-primary">{activity.totalMarks} Marks</span>
               </div>
             )}
 
             {activity.endTime && (
-              <div className="info-detail-row flex-between py-2 border-bottom">
+              <div className="info-detail-row">
                 <span className="text-xs font-semibold text-muted">Available Until</span>
                 <span className="text-xs font-bold text-dark">{formatDisplayDateTime(activity.endTime)}</span>
               </div>
             )}
 
-            <div className="info-detail-row flex-between py-2">
+            <div className="info-detail-row">
               <span className="text-xs font-semibold text-muted">Type</span>
               <span className="text-xs font-bold text-dark">{activity.purpose || 'Exam'}</span>
             </div>
@@ -579,16 +611,20 @@ export default function StudentActivityScreen({
           {/* START ACTIVITY BUTTON (ENABLED) */}
           <button
             type="button"
-            className="btn btn-primary btn-lg w-full font-bold shadow-md hover:shadow-lg transition-all mb-4"
+            className="btn-start-active"
             onClick={handleStartExamFlow}
           >
-            START ACTIVITY &rarr;
+            <span>START ACTIVITY</span>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <line x1="5" y1="12" x2="19" y2="12" />
+              <polyline points="12 5 19 12 12 19" />
+            </svg>
           </button>
 
           {activity.endTime && (
-            <div className="active-remaining-time-hint text-xs text-muted">
-              Make sure to complete and submit before the end time.
-            </div>
+            <p className="access-footer-hint">
+              Make sure to complete and submit your responses before the end time.
+            </p>
           )}
         </div>
       </div>
