@@ -106,7 +106,7 @@ const normalizeTimePayload = (data) => {
             individualStartTimeMs: p.individualStartTime ? new Date(p.individualStartTime).getTime() : null,
             individualEndTimeMs: p.individualEndTime ? new Date(p.individualEndTime).getTime() : null
           }))
-        : []
+        : (sec.parts || [])
     }));
   }
 

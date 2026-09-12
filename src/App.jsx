@@ -129,7 +129,13 @@ function App() {
           if (currentPath !== '/complete-profile') target = '/complete-profile';
         } else {
           if (['/login', '/register', '/verify-email', '/complete-profile', '/'].includes(currentPath)) {
-            target = '/dashboard';
+            const redirectTarget = sessionStorage.getItem('quizora_redirect_after_auth');
+            if (redirectTarget) {
+              sessionStorage.removeItem('quizora_redirect_after_auth');
+              target = redirectTarget;
+            } else {
+              target = '/dashboard';
+            }
           }
         }
       } else {
@@ -161,7 +167,13 @@ function App() {
   // Callback when user completes profile setup
   const handleProfileCompleted = (newProfileData) => {
     setProfileData(newProfileData);
-    navigateTo('/dashboard');
+    const redirectTarget = sessionStorage.getItem('quizora_redirect_after_auth');
+    if (redirectTarget) {
+      sessionStorage.removeItem('quizora_redirect_after_auth');
+      navigateTo(redirectTarget);
+    } else {
+      navigateTo('/dashboard');
+    }
   };
 
   // Callback when user updates profile from dashboard modal

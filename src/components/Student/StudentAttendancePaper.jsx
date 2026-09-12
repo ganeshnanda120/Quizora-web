@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import { uploadStudentAnswerFile } from '../../services/submissionService';
 import { getSynchronizedTime, parseActivityTime } from '../../services/timeSyncService';
+import { normalizeActivityQuestions } from '../../utils/questionUtils';
 import logoImg from '../../assets/logo.png';
 
 export default function StudentAttendancePaper({
@@ -10,152 +11,16 @@ export default function StudentAttendancePaper({
   onSubmit,
   onExpire
 }) {
-  const partMode = activity?.partMode || 'parts';
   const enableNegativeMarking = !!activity?.enableNegativeMarking;
 
-  // Universal Array Normalizer for Firestore maps vs Arrays
-  const toArray = (val) => {
-    if (!val) return [];
-    if (Array.isArray(val)) return val;
-    if (typeof val === 'object') return Object.values(val);
-    return [];
-  };
-
-  // Helper to extract questions from a part/container with stable IDs
-  const extractQuestionsFromPart = (p, prefix = 'q') => {
-    if (!p) return [];
-    const raw = p.questions || p.questionList || p.items || p.questionListObj;
-    const arr = toArray(raw);
-    return arr.map((q, idx) => {
-      if (!q || typeof q !== 'object') return null;
-      const stableId = q.id || `${prefix}_${idx + 1}`;
-      return {
-        ...q,
-        id: stableId,
-        type: q.type || 'mcq',
-        marks: q.marks !== undefined && q.marks !== null ? q.marks : 1
-      };
-    }).filter(Boolean);
-  };
-
-  // Determine Activity Architecture Structure
-  const activityStructure = useMemo(() => {
-    if (!activity) return { type: 'empty', hasSections: false, hasMultiParts: false };
-
-    const rawSections = toArray(activity.sections);
-    const validSections = rawSections.filter((sec) => {
-      const parts = toArray(sec.parts);
-      return parts.length > 0 || extractQuestionsFromPart(sec).length > 0;
-    });
-
-    if (validSections.length > 0 && activity.partMode === 'sections') {
-      return { type: 'sections', hasSections: true, hasMultiParts: true };
-    }
-
-    const rawPartsArr = toArray(activity.parts);
-    if (rawPartsArr.length > 1) {
-      return { type: 'multi_parts', hasSections: false, hasMultiParts: true };
-    }
-
-    if (rawPartsArr.length === 1) {
-      return { type: 'single_part', hasSections: false, hasMultiParts: false };
-    }
-
-    return { type: 'direct_questions', hasSections: false, hasMultiParts: false };
-  }, [activity]);
-
-  // Normalized sections structure (Questions strictly bound to their respective section & part)
-  const sections = useMemo(() => {
-    const rawSections = toArray(activity?.sections);
-    return rawSections.map((sec, sIdx) => {
-      const secParts = toArray(sec.parts).map((p, pIdx) => {
-        const prefix = `sec_${sIdx + 1}_p_${pIdx + 1}`;
-        const pQs = extractQuestionsFromPart(p, prefix);
-        return {
-          ...p,
-          id: p.id || `sec_${sIdx + 1}_p_${pIdx + 1}`,
-          title: p.title || `Part ${pIdx + 1}`,
-          questions: pQs
-        };
-      });
-      return {
-        ...sec,
-        id: sec.id || `sec_${sIdx + 1}`,
-        name: sec.name || `Section ${sIdx + 1}`,
-        parts: secParts
-      };
-    });
-  }, [activity]);
-
-  // Normalized raw parts structure (Multi-part strictly isolates parts; single-part falls back to root if empty)
-  const rawParts = useMemo(() => {
-    const directParts = toArray(activity?.parts);
-    const rootQuestions = toArray(activity?.questions || activity?.questionList || activity?.items).map((q, idx) => {
-      if (!q || typeof q !== 'object') return null;
-      return {
-        ...q,
-        id: q.id || `q_root_${idx + 1}`,
-        type: q.type || 'mcq',
-        marks: q.marks !== undefined && q.marks !== null ? q.marks : 1
-      };
-    }).filter(Boolean);
-
-    // 1. MULTI-PART ACTIVITY (2+ Parts):
-    // Part 1 gets ONLY Part 1's questions, Part 2 gets ONLY Part 2's questions, etc.
-    // NEVER dump root questions or cross-contaminate between parts!
-    if (directParts.length > 1) {
-      return directParts.map((p, pIdx) => {
-        const prefix = `p_${pIdx + 1}`;
-        return {
-          ...p,
-          id: p.id || `part_${pIdx + 1}`,
-          title: p.title || `Part ${pIdx + 1}`,
-          questions: extractQuestionsFromPart(p, prefix)
-        };
-      });
-    }
-
-    // 2. SECTIONS FALLBACK (when sections exist but accessed directly)
-    if (activityStructure.type === 'sections' && sections.length > 0) {
-      const flattened = [];
-      sections.forEach((sec, sIdx) => {
-        (sec.parts || []).forEach((p, pIdx) => {
-          flattened.push({
-            ...p,
-            id: p.id || `sec_${sIdx + 1}_p_${pIdx + 1}`,
-            title: p.title || `${sec.name || `Section ${sIdx + 1}`} - Part ${pIdx + 1}`,
-            questions: p.questions || []
-          });
-        });
-      });
-      if (flattened.length > 0) return flattened;
-    }
-
-    // 3. SINGLE-PART ACTIVITY (Exactly 1 Part):
-    // If the single part has questions, use them. Only if empty, fallback to root-level questions.
-    if (directParts.length === 1) {
-      const p = directParts[0];
-      const partQs = extractQuestionsFromPart(p, 'p_1');
-      const finalQuestions = partQs.length > 0 ? partQs : rootQuestions;
-      return [
-        {
-          ...p,
-          id: p.id || 'part_1',
-          title: p.title || 'Part 1',
-          questions: finalQuestions
-        }
-      ];
-    }
-
-    // 4. DIRECT QUESTIONS (No Parts array defined)
-    return [
-      {
-        id: 'part_1',
-        title: 'Part 1',
-        questions: rootQuestions
-      }
-    ];
-  }, [activity, activityStructure, sections]);
+  // Universal Single Source of Truth Question Normalizer
+  const normalizedData = useMemo(() => normalizeActivityQuestions(activity), [activity]);
+  const {
+    isSectionBased,
+    sections,
+    parts: normalizedParts,
+    allQuestions: allQuestionsList
+  } = normalizedData;
 
   // Session storage key
   const cacheKey = `quizora_active_session_${activityId}`;
@@ -173,10 +38,50 @@ export default function StudentAttendancePaper({
     return null;
   }, [cacheKey]);
 
-  // Navigation indices
+  // Raw Navigation indices from state
   const [activeSecIdx, setActiveSecIdx] = useState(() => savedState?.activeSecIdx || 0);
   const [activePartIdx, setActivePartIdx] = useState(() => savedState?.activePartIdx || 0);
   const [activeQIdx, setActiveQIdx] = useState(() => savedState?.activeQIdx || 0);
+
+  // Safe bounds indices
+  const safeSecIdx = useMemo(() => {
+    if (!isSectionBased || !sections || sections.length === 0) return 0;
+    return Math.min(Math.max(0, activeSecIdx), sections.length - 1);
+  }, [isSectionBased, sections, activeSecIdx]);
+
+  const activeSection = useMemo(() => {
+    if (isSectionBased && sections.length > 0) {
+      return sections[safeSecIdx] || sections[0];
+    }
+    return null;
+  }, [isSectionBased, sections, safeSecIdx]);
+
+  const activePartsList = useMemo(() => {
+    if (isSectionBased && activeSection?.parts && activeSection.parts.length > 0) {
+      return activeSection.parts;
+    }
+    return normalizedParts;
+  }, [isSectionBased, activeSection, normalizedParts]);
+
+  const safePartIdx = useMemo(() => {
+    if (!activePartsList || activePartsList.length === 0) return 0;
+    return Math.min(Math.max(0, activePartIdx), activePartsList.length - 1);
+  }, [activePartsList, activePartIdx]);
+
+  const activePart = useMemo(() => {
+    return activePartsList[safePartIdx] || activePartsList[0] || { id: 'part_1', title: 'Part 1', questions: [] };
+  }, [activePartsList, safePartIdx]);
+
+  const activeQuestions = useMemo(() => {
+    return activePart?.questions || [];
+  }, [activePart]);
+
+  const safeQIdx = useMemo(() => {
+    if (!activeQuestions || activeQuestions.length === 0) return 0;
+    return Math.min(Math.max(0, activeQIdx), activeQuestions.length - 1);
+  }, [activeQIdx, activeQuestions]);
+
+  const currentQuestion = activeQuestions[safeQIdx] || activeQuestions[0];
 
   // Answers Map: { [questionId]: value }
   const [answers, setAnswers] = useState(() => savedState?.answers || {});
@@ -238,90 +143,15 @@ export default function StudentAttendancePaper({
   // Submitted parts tracking (specifically for individualTime mode where submitted parts cannot be edited)
   const [submittedParts, setSubmittedParts] = useState(() => savedState?.submittedParts || {});
 
-  // Determine active section and parts list
-  const activeSection = useMemo(() => {
-    if (partMode === 'sections' && sections.length > 0) {
-      return sections[activeSecIdx] || sections[0];
-    }
-    return null;
-  }, [partMode, sections, activeSecIdx]);
-
-  const activePartsList = useMemo(() => {
-    if (partMode === 'sections' && activeSection?.parts && activeSection.parts.length > 0) {
-      return activeSection.parts;
-    }
-    return rawParts;
-  }, [partMode, activeSection, rawParts]);
-
-  const activePart = useMemo(() => {
-    return activePartsList[activePartIdx] || activePartsList[0] || { id: 'part_1', title: 'Part 1', questions: [] };
-  }, [activePartsList, activePartIdx]);
-
-  // Total questions list across all parts and sections (Preserves all legitimate questions with unique keys)
-  const allQuestionsList = useMemo(() => {
-    const list = [];
-    const seenIds = new Set();
-
-    const addQuestion = (q, fallbackId) => {
-      if (!q || typeof q !== 'object') return;
-      let qId = q.id || fallbackId;
-      if (seenIds.has(qId)) {
-        qId = `${qId}_${list.length + 1}`;
-      }
-      seenIds.add(qId);
-      list.push({ ...q, id: qId });
-    };
-
-    if (activityStructure.type === 'sections' && sections.length > 0) {
-      sections.forEach((sec, sIdx) => {
-        (sec.parts || []).forEach((p, pIdx) => {
-          (p.questions || []).forEach((q, qIdx) => {
-            addQuestion(q, `sec_${sIdx + 1}_p_${pIdx + 1}_q_${qIdx + 1}`);
-          });
-        });
-      });
-    } else {
-      rawParts.forEach((p, pIdx) => {
-        (p.questions || []).forEach((q, qIdx) => {
-          addQuestion(q, `p_${pIdx + 1}_q_${qIdx + 1}`);
-        });
-      });
-    }
-
-    return list;
-  }, [activityStructure, sections, rawParts]);
-
-  // Active Questions for current part (Strictly isolates questions belonging to this Part ONLY)
-  const activeQuestions = useMemo(() => {
-    return toArray(activePart?.questions);
-  }, [activePart]);
-
-  const safeQIdx = useMemo(() => {
-    if (activeQuestions.length === 0) return 0;
-    return Math.min(Math.max(0, activeQIdx), activeQuestions.length - 1);
-  }, [activeQIdx, activeQuestions.length]);
-
-  const currentQuestion = activeQuestions[safeQIdx] || activeQuestions[0];
-
-  // Diagnostic Logging
-  useEffect(() => {
-    console.log('[QUIZORA DEBUG] Activity ID loaded:', activity?.activityId || activityId);
-    console.log('[QUIZORA DEBUG] Activity Structure:', activityStructure.type);
-    console.log('[QUIZORA DEBUG] Total questions fetched:', allQuestionsList.length);
-    console.log('[QUIZORA DEBUG] Current Part ID:', activePart?.id || 'none');
-    console.log('[QUIZORA DEBUG] Current Part Index:', activePartIdx);
-    console.log('[QUIZORA DEBUG] Part questions count:', activeQuestions.length);
-  }, [activityId, activity, activityStructure, activePart, activePartIdx, allQuestionsList, activeQuestions]);
-
   // Part navigation mode ('sequential' | 'free' | 'individualTime')
   const partNavMode = useMemo(() => {
-    if (partMode === 'sections' && activeSection?.partNavigationMode) {
+    if (isSectionBased && activeSection?.partNavigationMode) {
       return activeSection.partNavigationMode;
     }
     return activity?.partNavigationMode || 'sequential';
-  }, [partMode, activeSection, activity]);
+  }, [isSectionBased, activeSection, activity]);
 
-  const isMultiPart = activePartsList.length > 1 || (partMode === 'sections' && sections.length > 1);
+  const isMultiPart = activePartsList.length > 1 || (isSectionBased && sections.length > 1);
 
   // Auto-expire handler
   const handleAutoExpireSubmit = useCallback(async () => {
@@ -460,12 +290,12 @@ export default function StudentAttendancePaper({
   // Check if a Part has started (for individualTime mode)
   const isPartStarted = useCallback((pIdx, sIdx = activeSecIdx) => {
     if (partNavMode !== 'individualTime') return true;
-    const targetList = partMode === 'sections' ? (sections[sIdx]?.parts || []) : rawParts;
+    const targetList = isSectionBased ? (sections[sIdx]?.parts || []) : normalizedParts;
     const targetPart = targetList[pIdx];
     if (!targetPart?.individualStartTime) return true;
     const startMs = targetPart.individualStartTimeMs || parseActivityTime(targetPart.individualStartTime, activity);
     return currentTime >= startMs;
-  }, [partNavMode, partMode, sections, rawParts, activeSecIdx, currentTime, activity]);
+  }, [partNavMode, isSectionBased, sections, normalizedParts, activeSecIdx, currentTime, activity]);
 
   // Check if a Part is submitted/locked in individualTime mode
   const isPartSubmitted = useCallback((pIdx, sIdx = activeSecIdx) => {
@@ -564,8 +394,16 @@ export default function StudentAttendancePaper({
     });
   };
 
+  // Switch Active Section safely
+  const handleSelectSection = (targetSecIdx) => {
+    setActiveSecIdx(targetSecIdx);
+    setActivePartIdx(0);
+    setActiveQIdx(0);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
   // Switch Active Part safely
-  const handleSelectPart = (targetPartIdx, targetSecIdx = activeSecIdx) => {
+  const handleSelectPart = (targetPartIdx, targetSecIdx = safeSecIdx) => {
     if (!isPartUnlocked(targetPartIdx, targetSecIdx)) return;
     setActiveSecIdx(targetSecIdx);
     setActivePartIdx(targetPartIdx);
@@ -575,7 +413,7 @@ export default function StudentAttendancePaper({
 
   // Advance to Next Question
   const handleNextQuestion = () => {
-    if (activeQIdx < activeQuestions.length - 1) {
+    if (safeQIdx < activeQuestions.length - 1) {
       setActiveQIdx((prev) => prev + 1);
       window.scrollTo({ top: 0, behavior: 'smooth' });
     } else {
@@ -585,11 +423,11 @@ export default function StudentAttendancePaper({
 
   // Go to Previous Question
   const handlePrevQuestion = () => {
-    if (activeQIdx > 0) {
+    if (safeQIdx > 0) {
       setActiveQIdx((prev) => prev - 1);
       window.scrollTo({ top: 0, behavior: 'smooth' });
-    } else if (partNavMode === 'free' && activePartIdx > 0 && isPartUnlocked(activePartIdx - 1)) {
-      const prevPart = activePartsList[activePartIdx - 1];
+    } else if (partNavMode === 'free' && safePartIdx > 0 && isPartUnlocked(safePartIdx - 1)) {
+      const prevPart = activePartsList[safePartIdx - 1];
       setActivePartIdx((prev) => prev - 1);
       setActiveQIdx(Math.max(0, (prevPart?.questions?.length || 1) - 1));
       window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -609,15 +447,15 @@ export default function StudentAttendancePaper({
   };
 
   const markPartCompletedAndAdvance = () => {
-    const key = `${activeSecIdx}_${activePartIdx}`;
+    const key = `${safeSecIdx}_${safePartIdx}`;
     setCompletedParts((prev) => ({ ...prev, [key]: true }));
     if (partNavMode === 'individualTime') {
       setSubmittedParts((prev) => ({ ...prev, [key]: true }));
     }
     setShowUnansweredWarningModal(false);
 
-    const hasNextPart = activePartIdx < activePartsList.length - 1;
-    const hasNextSec = partMode === 'sections' && activeSecIdx < sections.length - 1;
+    const hasNextPart = safePartIdx < activePartsList.length - 1;
+    const hasNextSec = isSectionBased && safeSecIdx < sections.length - 1;
 
     if (hasNextPart) {
       if (partNavMode === 'sequential') {
@@ -643,8 +481,8 @@ export default function StudentAttendancePaper({
 
   const handleStartNextPartFromTransition = () => {
     setShowPartTransitionModal(false);
-    const hasNextPart = activePartIdx < activePartsList.length - 1;
-    const hasNextSec = partMode === 'sections' && activeSecIdx < sections.length - 1;
+    const hasNextPart = safePartIdx < activePartsList.length - 1;
+    const hasNextSec = isSectionBased && safeSecIdx < sections.length - 1;
 
     if (hasNextPart) {
       setActivePartIdx((prev) => prev + 1);
@@ -675,10 +513,34 @@ export default function StudentAttendancePaper({
   const activeTimerDisplay = partSecondsRemaining !== null ? partSecondsRemaining : globalSecondsRemaining;
 
   // Check if on last question of current part
-  const isLastQuestionOfPart = activeQIdx === activeQuestions.length - 1;
+  const isLastQuestionOfPart = safeQIdx === activeQuestions.length - 1;
 
-  // Check if on final part of the exam
-  const isFinalPart = activePartIdx === activePartsList.length - 1 && (partMode !== 'sections' || activeSecIdx === sections.length - 1);
+  // Check if on final part of the activity
+  const isFinalPart = safePartIdx === activePartsList.length - 1 && (!isSectionBased || safeSecIdx === sections.length - 1);
+
+  // Next part metadata for transition modal
+  const nextPartInfo = useMemo(() => {
+    const hasNextPart = safePartIdx < activePartsList.length - 1;
+    if (hasNextPart) {
+      const nextP = activePartsList[safePartIdx + 1];
+      return {
+        title: nextP?.title || `Part ${safePartIdx + 2}`,
+        questionCount: nextP?.questions?.length || 0,
+        sectionName: activeSection?.name || ''
+      };
+    }
+    const hasNextSec = isSectionBased && safeSecIdx < sections.length - 1;
+    if (hasNextSec) {
+      const nextSec = sections[safeSecIdx + 1];
+      const nextP = (nextSec?.parts || [])[0];
+      return {
+        title: `${nextSec?.name || `Section ${safeSecIdx + 2}`} - ${nextP?.title || 'Part 1'}`,
+        questionCount: nextP?.questions?.length || 0,
+        sectionName: nextSec?.name || ''
+      };
+    }
+    return null;
+  }, [safePartIdx, activePartsList, isSectionBased, safeSecIdx, sections, activeSection]);
 
   return (
     <div className="student-attendance-viewport fade-in">
@@ -723,6 +585,32 @@ export default function StudentAttendancePaper({
           </div>
         </div>
 
+        {/* SECTION NAVIGATION BAR (When 2+ Sections configured) */}
+        {isSectionBased && sections.length > 1 && (
+          <div className="student-section-nav-row">
+            <span className="text-xxs font-bold uppercase tracking-wider text-muted mr-1">Section:</span>
+            {sections.map((sec, sIdx) => {
+              const isSecActive = safeSecIdx === sIdx;
+              const secQuestions = (sec.parts || []).reduce((acc, p) => acc + (p.questions?.length || 0), 0);
+              const secAnswered = (sec.parts || []).reduce((acc, p) => {
+                return acc + (p.questions || []).filter((q) => isQuestionAnswered(q.id)).length;
+              }, 0);
+
+              return (
+                <button
+                  key={sec.id || sIdx}
+                  type="button"
+                  className={`section-nav-pill ${isSecActive ? 'active' : ''}`}
+                  onClick={() => handleSelectSection(sIdx)}
+                >
+                  <span className="section-nav-name font-bold">{sec.name || `Section ${sIdx + 1}`}</span>
+                  <span className="section-nav-counts text-xs">({secAnswered}/{secQuestions})</span>
+                </button>
+              );
+            })}
+          </div>
+        )}
+
         {/* MOBILE PART NAVIGATION BAR (Shown on small screens when multi-part) */}
         {isMultiPart && (
           <div className="student-part-nav-bar mobile-only-part-nav">
@@ -730,7 +618,7 @@ export default function StudentAttendancePaper({
               {activePartsList.map((p, pIdx) => {
                 const partQs = p.questions || [];
                 const partAnsCount = partQs.filter((q) => isQuestionAnswered(q.id)).length;
-                const isActive = activePartIdx === pIdx;
+                const isActive = safePartIdx === pIdx;
                 const isCompleted = isPartCompleted(pIdx);
                 const isUnlocked = isPartUnlocked(pIdx);
 
@@ -757,19 +645,52 @@ export default function StudentAttendancePaper({
 
       {/* 2. MAIN WORKSPACE WITH DESKTOP LEFT SIDEBAR */}
       <div className="student-workspace-layout">
-        {/* DESKTOP LEFT SIDEBAR: PARTS LIST, PART INFO & QUESTION PALETTE */}
+        {/* DESKTOP LEFT SIDEBAR: SECTIONS, PARTS LIST, PART INFO & QUESTION PALETTE */}
         <aside className="student-desktop-sidebar">
-          {/* A. MULTI-PART NAVIGATION CARDS */}
+          {/* A1. SECTIONS CARD (When 2+ Sections) */}
+          {isSectionBased && sections.length > 1 && (
+            <div className="sidebar-card mb-4 p-4 bg-white border rounded-2xl shadow-sm">
+              <span className="sidebar-card-label text-xxs font-bold uppercase tracking-wider text-muted block mb-2.5">
+                Sections / Groups
+              </span>
+              <div className="sidebar-sections-list flex flex-col gap-2">
+                {sections.map((sec, sIdx) => {
+                  const isSecActive = safeSecIdx === sIdx;
+                  const secQuestions = (sec.parts || []).reduce((acc, p) => acc + (p.questions?.length || 0), 0);
+                  const secAnswered = (sec.parts || []).reduce((acc, p) => {
+                    return acc + (p.questions || []).filter((q) => isQuestionAnswered(q.id)).length;
+                  }, 0);
+
+                  return (
+                    <button
+                      key={sec.id || sIdx}
+                      type="button"
+                      className={`sidebar-part-btn ${isSecActive ? 'active' : ''}`}
+                      onClick={() => handleSelectSection(sIdx)}
+                    >
+                      <div className="sidebar-part-btn-main">
+                        <span className="part-indicator-icon">{isSecActive ? '●' : '○'}</span>
+                        <span className="part-btn-title">{sec.name || `Section ${sIdx + 1}`}</span>
+                      </div>
+                      <span className="part-btn-progress">{secAnswered}/{secQuestions}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* A2. MULTI-PART NAVIGATION CARDS */}
           {isMultiPart && (
             <div className="sidebar-card mb-4 p-4 bg-white border rounded-2xl shadow-sm">
               <span className="sidebar-card-label text-xxs font-bold uppercase tracking-wider text-muted block mb-3">
-                Activity Parts
+                {isSectionBased ? `${activeSection?.name || 'Section'} Parts` : 'Activity Parts'}
               </span>
               <div className="sidebar-parts-list flex flex-col gap-2.5">
                 {activePartsList.map((p, pIdx) => {
                   const partQs = p.questions || [];
                   const partAnsCount = partQs.filter((q) => isQuestionAnswered(q.id)).length;
-                  const isActive = activePartIdx === pIdx;
+                  const isActive = safePartIdx === pIdx;
                   const isCompleted = isPartCompleted(pIdx);
                   const isUnlocked = isPartUnlocked(pIdx);
 
@@ -804,7 +725,7 @@ export default function StudentAttendancePaper({
               Active Part Details
             </span>
             <h3 className="text-sm font-bold text-dark m-0 mb-2 leading-snug">
-              {activePart?.title || `Part ${activePartIdx + 1}`}
+              {activePart?.title || `Part ${safePartIdx + 1}`}
             </h3>
             <div className="text-xs text-muted flex-align-center gap-2 mb-3.5 font-medium">
               <span>{activeQuestions.length} Questions</span>
@@ -838,7 +759,7 @@ export default function StudentAttendancePaper({
 
               <div className="student-q-palette-grid">
                 {activeQuestions.map((q, idx) => {
-                  const isCurrent = activeQIdx === idx;
+                  const isCurrent = safeQIdx === idx;
                   const isAns = isQuestionAnswered(q.id);
                   const isVis = !!visitedQuestions[q.id];
 
@@ -879,7 +800,7 @@ export default function StudentAttendancePaper({
           <div className="mobile-only-part-summary mb-4">
             <div className="p-4 bg-white border rounded-xl shadow-sm mb-3 flex-between align-center">
               <div>
-                <span className="text-xs font-bold text-dark block">{activePart?.title || `Part ${activePartIdx + 1}`}</span>
+                <span className="text-xs font-bold text-dark block">{activePart?.title || `Part ${safePartIdx + 1}`}</span>
                 <span className="text-xxs text-muted">{activeQuestions.length} Questions • {activePart?.partTotalMarks || 0} Marks</span>
               </div>
               <span className="text-xs font-bold text-primary bg-indigo-50 px-2.5 py-1 rounded-md">
@@ -891,7 +812,7 @@ export default function StudentAttendancePaper({
               <div className="p-4 bg-white border rounded-xl shadow-sm">
                 <div className="student-q-palette-grid">
                   {activeQuestions.map((q, idx) => {
-                    const isCurrent = activeQIdx === idx;
+                    const isCurrent = safeQIdx === idx;
                     const isAns = isQuestionAnswered(q.id);
                     const isVis = !!visitedQuestions[q.id];
 
@@ -920,12 +841,12 @@ export default function StudentAttendancePaper({
           </div>
 
           {/* FOCUSED QUESTION CARD */}
-          {partNavMode === 'individualTime' && !isPartStarted(activePartIdx) ? (
+          {partNavMode === 'individualTime' && !isPartStarted(safePartIdx) ? (
             <div className="part-locked-card p-8 bg-white border rounded-2xl text-center shadow-sm">
               <div className="lock-icon-circle mx-auto mb-3 bg-amber-50 text-amber-600 w-14 h-14 rounded-full flex-center text-2xl">
                 🔒
               </div>
-              <h3 className="text-lg font-bold text-dark mb-1">{activePart?.title || `Part ${activePartIdx + 1}`} is Locked</h3>
+              <h3 className="text-lg font-bold text-dark mb-1">{activePart?.title || `Part ${safePartIdx + 1}`} is Locked</h3>
               <p className="text-sm text-muted mb-4 max-w-md mx-auto">
                 This part has individual timing and will unlock at{' '}
                 <strong>{activePart?.individualStartTime ? new Date(activePart.individualStartTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true }) : 'its scheduled start time'}</strong>.
@@ -934,12 +855,12 @@ export default function StudentAttendancePaper({
                 ⏳ Please wait for the scheduled start time or switch to an available Part.
               </div>
             </div>
-          ) : partNavMode === 'individualTime' && isPartSubmitted(activePartIdx) ? (
+          ) : partNavMode === 'individualTime' && isPartSubmitted(safePartIdx) ? (
             <div className="part-submitted-card p-8 bg-white border rounded-2xl text-center shadow-sm">
               <div className="check-icon-circle mx-auto mb-3 bg-emerald-50 text-emerald-600 w-14 h-14 rounded-full flex-center text-2xl font-bold">
                 ✓
               </div>
-              <h3 className="text-lg font-bold text-dark mb-1">{activePart?.title || `Part ${activePartIdx + 1}`} Submitted</h3>
+              <h3 className="text-lg font-bold text-dark mb-1">{activePart?.title || `Part ${safePartIdx + 1}`} Submitted</h3>
               <p className="text-sm text-muted mb-0 max-w-md mx-auto">
                 Your responses for this part have been submitted and locked. You can view or proceed to the next available Part.
               </p>
@@ -1098,35 +1019,27 @@ export default function StudentAttendancePaper({
                         : val === optIdx;
 
                       return (
-                        <button
+                        <div
                           key={optIdx}
-                          type="button"
-                          className={`student-mcq-option-btn flex-align-center gap-3.5 p-4 border-2 rounded-xl text-left transition-all ${isSelected ? 'selected' : ''}`}
+                          className={`student-option-card flex-align-center gap-3.5 p-3.5 sm:p-4 rounded-xl border cursor-pointer transition-all ${isSelected ? 'option-selected' : 'option-default'}`}
                           onClick={() => handleMcqSelect(currentQuestion.id, optIdx, isMulti)}
                         >
-                          <span className={`option-letter-circle font-bold text-sm ${isSelected ? 'selected' : ''}`}>
-                            {optLetter}
-                          </span>
-                          <span className="option-text text-sm sm:text-base font-medium text-dark flex-1 leading-snug">
-                            {typeof opt === 'string' ? opt : opt?.text || `Option ${optIdx + 1}`}
-                          </span>
-                          <div className={`option-selection-indicator ${isSelected ? 'checked' : ''}`}>
-                            {isMulti ? (
-                              <span className="checkbox-indicator">{isSelected ? '✓' : ''}</span>
-                            ) : (
-                              <span className="radio-indicator">{isSelected ? '●' : ''}</span>
-                            )}
+                          <div className={`option-selector-circle flex-center font-bold text-xs rounded-full border ${isSelected ? 'selector-selected' : 'selector-default'}`}>
+                            {isSelected ? '✓' : optLetter}
                           </div>
-                        </button>
+                          <span className="option-label-text font-semibold text-sm text-dark flex-1">
+                            {opt}
+                          </span>
+                        </div>
                       );
                     })}
                   </div>
 
-                  {isQuestionAnswered(currentQuestion.id) && (
-                    <div className="q-clear-row mt-3.5 text-right">
+                  {answers[currentQuestion.id] !== undefined && (
+                    <div className="mt-3 flex-end">
                       <button
                         type="button"
-                        className="btn-clear-selection text-xs text-muted hover:text-danger font-semibold"
+                        className="btn btn-ghost btn-xs text-muted"
                         onClick={() => handleClearAnswer(currentQuestion.id)}
                       >
                         Clear Selection
@@ -1136,167 +1049,97 @@ export default function StudentAttendancePaper({
                 </div>
               )}
 
-              {/* 2. WRITTEN ANSWER TEXTAREA + OPTIONAL FILE UPLOAD */}
+              {/* 2. WRITTEN QUESTION RENDERER */}
               {currentQuestion.type === 'written' && (
-                <div className="student-written-input-container mt-4">
-                  <label className="form-label font-semibold text-sm mb-2.5 block" htmlFor={`written-ans-${currentQuestion.id}`}>
-                    Your Written Response:
-                  </label>
-                  <textarea
-                    id={`written-ans-${currentQuestion.id}`}
-                    className="form-input text-area student-written-textarea w-full p-4 border-2 rounded-xl text-base"
-                    rows="7"
-                    placeholder="Type your complete response here..."
-                    value={answers[currentQuestion.id] || ''}
-                    onChange={(e) => handleWrittenChange(currentQuestion.id, e.target.value)}
-                  />
-                  <div className="written-textarea-footer flex-between align-center mt-2.5 text-xs text-muted font-medium">
-                    <div></div>
-                    {isQuestionAnswered(currentQuestion.id) && (
-                      <button
-                        type="button"
-                        className="btn-clear-selection text-xs text-muted hover:text-danger font-semibold"
-                        onClick={() => handleClearAnswer(currentQuestion.id)}
-                      >
-                        Clear Answer
-                      </button>
-                    )}
-                  </div>
-
-                  {/* USER-SIDE UPLOAD OPTION FOR WRITTEN QUESTION */}
-                  <div className="student-written-attachment-section mt-7 pt-6 border-top">
-                    <div className="student-attachment-header-row">
-                      <label className="form-label">
-                        Attach Handwritten Paper / Photo Scan:
-                      </label>
-                      <div>
-                        <input
-                          type="file"
-                          id={`written-file-input-${currentQuestion.id}`}
-                          className="hidden-file-input"
-                          accept="image/png,image/jpeg,image/webp,application/pdf"
-                          onChange={(e) => {
-                            const f = e.target.files?.[0];
-                            if (f) handleFileUpload(`${currentQuestion.id}_files`, f);
-                            e.target.value = '';
-                          }}
-                          disabled={uploadingQId === `${currentQuestion.id}_files`}
-                        />
-                        <label
-                          htmlFor={`written-file-input-${currentQuestion.id}`}
-                          className="btn btn-upload-mcq-side cursor-pointer"
-                          style={{ padding: '6px 14px', fontSize: '0.8rem' }}
-                        >
-                          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-                            <polyline points="17 8 12 3 7 8" />
-                            <line x1="12" y1="3" x2="12" y2="15" />
-                          </svg>
-                          <span>{uploadingQId === `${currentQuestion.id}_files` ? 'Uploading...' : 'Upload'}</span>
-                        </label>
-                      </div>
-                    </div>
-
-                    {Array.isArray(answers[`${currentQuestion.id}_files`]) && answers[`${currentQuestion.id}_files`].length > 0 && (
-                      <div className="uploaded-answers-list mt-2 flex flex-col gap-2">
-                        {answers[`${currentQuestion.id}_files`].map((fileObj) => (
-                          <div key={fileObj.id} className="uploaded-answer-card flex-between align-center p-2.5 bg-slate-50 border rounded-xl shadow-sm">
-                            <div className="flex-align-center gap-2">
-                              <span className={`text-xxs font-bold px-2 py-0.5 rounded text-white ${fileObj.type === 'image' ? 'bg-indigo-600' : 'bg-red-600'}`}>
-                                {fileObj.type === 'image' ? 'IMG' : 'PDF'}
-                              </span>
-                              <a href={fileObj.url} target="_blank" rel="noopener noreferrer" className="text-xs font-semibold text-primary hover:underline truncate max-w-xs">
-                                {fileObj.name || 'Attached Answer File'} ↗
-                              </a>
-                            </div>
-                            <button
-                              type="button"
-                              className="btn-delete-uploaded text-xs text-danger hover:text-red-800 font-bold px-2 py-0.5 rounded"
-                              onClick={() => handleRemoveUploadedFile(`${currentQuestion.id}_files`, fileObj.id)}
-                            >
-                              Remove
-                            </button>
-                          </div>
-                        ))}
-                      </div>
-                    )}
+                <div className="student-written-answer-container mt-4">
+                  <div className="form-group mb-0">
+                    <label className="form-label font-bold text-sm text-dark mb-2 block">
+                      Type Your Answer:
+                    </label>
+                    <textarea
+                      rows="6"
+                      className="form-input written-textarea p-3.5 text-sm leading-relaxed"
+                      placeholder="Type your response here clearly..."
+                      value={answers[currentQuestion.id] || ''}
+                      onChange={(e) => handleWrittenChange(currentQuestion.id, e.target.value)}
+                    ></textarea>
                   </div>
                 </div>
               )}
 
-              {/* 3. UPLOAD FILES ANSWER AREA */}
+              {/* 3. UPLOAD QUESTION RENDERER */}
               {(currentQuestion.type === 'upload' || currentQuestion.type === 'upload_paper') && (
-                <div className="student-written-attachment-section mt-7 pt-6 border-top">
-                  <div className="student-attachment-header-row">
-                    <label className="form-label">
-                      Upload Answer Document / Photo:
-                    </label>
-                    <div>
-                      <input
-                        type="file"
-                        id={`file-input-${currentQuestion.id}`}
-                        className="hidden-file-input"
-                        accept="image/png,image/jpeg,image/webp,application/pdf"
-                        onChange={(e) => {
-                          const f = e.target.files?.[0];
-                          if (f) handleFileUpload(currentQuestion.id, f);
-                          e.target.value = '';
-                        }}
-                        disabled={uploadingQId === currentQuestion.id}
-                      />
-                      <label
-                        htmlFor={`file-input-${currentQuestion.id}`}
-                        className="btn btn-upload-mcq-side cursor-pointer"
-                        style={{ padding: '6px 14px', fontSize: '0.8rem' }}
-                      >
-                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-                          <polyline points="17 8 12 3 7 8" />
-                          <line x1="12" y1="3" x2="12" y2="15" />
-                        </svg>
-                        <span>{uploadingQId === currentQuestion.id ? 'Uploading...' : 'Upload'}</span>
-                      </label>
-                    </div>
+                <div className="student-upload-answer-container mt-4">
+                  <div className="upload-instructions mb-3 text-xs text-muted">
+                    <span>Upload your answer sheet (Photos of written paper or PDF document). Maximum 15MB per file.</span>
                   </div>
 
+                  <div className="upload-dropzone border-dashed border-2 p-6 rounded-xl text-center bg-slate-50">
+                    <input
+                      type="file"
+                      id={`file_input_${currentQuestion.id}`}
+                      className="hidden-file-input"
+                      accept="image/*,application/pdf"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (file) handleFileUpload(currentQuestion.id, file);
+                        e.target.value = '';
+                      }}
+                      disabled={uploadingQId === currentQuestion.id}
+                    />
+                    <label
+                      htmlFor={`file_input_${currentQuestion.id}`}
+                      className="btn btn-secondary btn-sm cursor-pointer inline-flex items-center gap-2"
+                    >
+                      {uploadingQId === currentQuestion.id ? (
+                        <>
+                          <div className="spinner-xs"></div>
+                          <span>Uploading File...</span>
+                        </>
+                      ) : (
+                        <>
+                          <span>📁 Choose File / Photo to Upload</span>
+                        </>
+                      )}
+                    </label>
+                  </div>
+
+                  {/* Uploaded Files List */}
                   {Array.isArray(answers[currentQuestion.id]) && answers[currentQuestion.id].length > 0 && (
-                    <div className="uploaded-answers-list mt-2 flex flex-col gap-2">
-                      {answers[currentQuestion.id].map((fileObj) => (
-                        <div key={fileObj.id} className="uploaded-answer-card flex-between align-center p-2.5 bg-slate-50 border rounded-xl shadow-sm">
-                          <div className="flex-align-center gap-2">
-                            <span className={`text-xxs font-bold px-2 py-0.5 rounded text-white ${fileObj.type === 'image' ? 'bg-indigo-600' : 'bg-red-600'}`}>
+                    <div className="uploaded-files-list mt-3 flex flex-col gap-2">
+                      {answers[currentQuestion.id].map((fileObj, fIdx) => (
+                        <div key={fileObj.id || fIdx} className="uploaded-file-row flex-between align-center p-3 bg-white border rounded-xl shadow-xs">
+                          <div className="flex-align-center gap-2.5">
+                            <span className="file-icon-badge text-xs font-bold bg-primary text-white px-2 py-0.5 rounded">
                               {fileObj.type === 'image' ? 'IMG' : 'PDF'}
                             </span>
-                            <a
-                              href={fileObj.url}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="text-xs font-semibold text-primary hover:underline truncate max-w-xs"
-                            >
-                              {fileObj.name || 'Answer File'} ↗
-                            </a>
+                            <span className="text-xs font-semibold text-dark truncate max-w-xs">{fileObj.name}</span>
                           </div>
-                          <button
-                            type="button"
-                            className="btn-delete-uploaded text-xs text-danger hover:text-red-800 font-bold px-2 py-0.5 rounded"
-                            onClick={() => handleRemoveUploadedFile(currentQuestion.id, fileObj.id)}
-                          >
-                            Remove
-                          </button>
+                          <div className="flex-align-center gap-2">
+                            <a href={fileObj.url} target="_blank" rel="noopener noreferrer" className="btn btn-ghost btn-xs text-primary font-bold">
+                              Preview ↗
+                            </a>
+                            <button
+                              type="button"
+                              className="btn btn-ghost btn-xs text-danger"
+                              onClick={() => handleRemoveUploadedFile(currentQuestion.id, fileObj.id)}
+                            >
+                              ✕ Remove
+                            </button>
+                          </div>
                         </div>
                       ))}
                     </div>
                   )}
 
-                  {/* DESCRIPTION / NOTES BOX FOR UPLOAD */}
-                  <div className="student-upload-notes-box mt-4 pt-3">
-                    <label className="form-label font-semibold text-xs text-muted mb-1.5 block" htmlFor={`upload-notes-${currentQuestion.id}`}>
-                      Description / Notes for your submission:
+                  {/* Optional Notes for Upload Question */}
+                  <div className="form-group mt-3 mb-0">
+                    <label className="form-label text-xs font-semibold text-muted mb-1 block">
+                      Optional Notes / Written Explanation:
                     </label>
                     <textarea
-                      id={`upload-notes-${currentQuestion.id}`}
-                      className="form-input text-area w-full p-3 border rounded-xl text-sm"
                       rows="3"
+                      className="form-input text-xs"
                       placeholder="Add any additional notes or details about your uploaded solution..."
                       value={answers[`${currentQuestion.id}_notes`] || ''}
                       onChange={(e) => setAnswers((prev) => ({ ...prev, [`${currentQuestion.id}_notes`]: e.target.value }))}
@@ -1312,7 +1155,7 @@ export default function StudentAttendancePaper({
             {/* Top Row: Question progress in this Part */}
             <div className="student-bottom-counter-row text-center mb-3 pb-3 border-bottom">
               <span className="font-bold text-xs sm:text-sm text-slate-700">
-                Question {activeQIdx + 1} of {activeQuestions.length} in this Part
+                Question {safeQIdx + 1} of {activeQuestions.length} in this Part
               </span>
             </div>
 
@@ -1320,7 +1163,7 @@ export default function StudentAttendancePaper({
             <div className="student-bottom-btns-row flex-between align-center flex-wrap gap-3">
               {/* Left: Previous Button (HIDDEN on Question 1) */}
               <div className="student-bottom-btn-left">
-                {activeQIdx > 0 && (
+                {safeQIdx > 0 && (
                   <button
                     type="button"
                     className="btn btn-secondary btn-md font-semibold"
@@ -1371,7 +1214,7 @@ export default function StudentAttendancePaper({
 
             <div className="modal-body-content py-4">
               <div className="alert alert-warning mb-3">
-                <span>⚠️ You have <strong>{activeQuestions.length - activePartAnsweredCount} unanswered question(s)</strong> in {activePart?.title || `Part ${activePartIdx + 1}`}.</span>
+                <span>⚠️ You have <strong>{activeQuestions.length - activePartAnsweredCount} unanswered question(s)</strong> in {activePart?.title || `Part ${safePartIdx + 1}`}.</span>
               </div>
               <p className="text-sm text-dark mb-0 leading-normal">
                 Would you like to stay and review your unanswered questions, or save this Part and proceed?
@@ -1410,21 +1253,23 @@ export default function StudentAttendancePaper({
             </div>
 
             <h3 className="text-xl font-extrabold text-dark mb-1">
-              {activePart?.title || `Part ${activePartIdx + 1}`} Completed ✓
+              {activePart?.title || `Part ${safePartIdx + 1}`} Completed ✓
             </h3>
             <p className="text-sm text-muted mb-5">
               Great job! You have completed this Part and are ready to move on.
             </p>
 
-            <div className="transition-next-part-box p-4 bg-slate-50 border rounded-xl mb-5 text-left">
-              <span className="text-xxs font-bold uppercase tracking-wider text-primary block mb-1">Next Up</span>
-              <h4 className="text-base font-bold text-dark m-0">
-                {activePartsList[activePartIdx + 1]?.title || `Part ${activePartIdx + 2}`}
-              </h4>
-              <span className="text-xs text-muted">
-                {activePartsList[activePartIdx + 1]?.questions?.length || 0} Questions
-              </span>
-            </div>
+            {nextPartInfo && (
+              <div className="transition-next-part-box p-4 bg-slate-50 border rounded-xl mb-5 text-left">
+                <span className="text-xxs font-bold uppercase tracking-wider text-primary block mb-1">Next Up</span>
+                <h4 className="text-base font-bold text-dark m-0">
+                  {nextPartInfo.title}
+                </h4>
+                <span className="text-xs text-muted">
+                  {nextPartInfo.questionCount} Questions
+                </span>
+              </div>
+            )}
 
             <div className="flex flex-col gap-2">
               <button
@@ -1472,36 +1317,79 @@ export default function StudentAttendancePaper({
               </div>
 
               <div className="review-parts-breakdown flex flex-col gap-3 mb-4">
-                {rawParts.map((p, pI) => {
-                  const partQs = p.questions || [];
-                  const pAns = partQs.filter((q) => isQuestionAnswered(q.id)).length;
-                  const pUnans = partQs.length - pAns;
+                {isSectionBased ? (
+                  sections.map((sec, sI) => (
+                    <div key={sec.id || sI} className="mb-2">
+                      <span className="text-xs font-bold text-dark uppercase block mb-1.5 tracking-wider">
+                        {sec.name || `Section ${sI + 1}`}
+                      </span>
+                      <div className="flex flex-col gap-2">
+                        {(sec.parts || []).map((p, pI) => {
+                          const partQs = p.questions || [];
+                          const pAns = partQs.filter((q) => isQuestionAnswered(q.id)).length;
+                          const pUnans = partQs.length - pAns;
 
-                  return (
-                    <div key={p.id || pI} className="flex-between align-center p-3.5 bg-slate-50 rounded-xl border">
-                      <div>
-                        <span className="text-sm font-bold text-dark block">{p.title || `Part ${pI + 1}`}</span>
-                        <span className="text-xs text-muted">
-                          {pAns === partQs.length ? (
-                            <strong className="text-success">✓ {pAns}/{partQs.length} answered</strong>
-                          ) : (
-                            <span>✓ {pAns}/{partQs.length} answered {pUnans > 0 && <span className="text-danger ml-1">({pUnans} unanswered)</span>}</span>
-                          )}
-                        </span>
+                          return (
+                            <div key={p.id || pI} className="flex-between align-center p-3 bg-slate-50 rounded-xl border">
+                              <div>
+                                <span className="text-sm font-bold text-dark block">{p.title || `Part ${pI + 1}`}</span>
+                                <span className="text-xs text-muted">
+                                  {pAns === partQs.length ? (
+                                    <strong className="text-success">✓ {pAns}/{partQs.length} answered</strong>
+                                  ) : (
+                                    <span>✓ {pAns}/{partQs.length} answered {pUnans > 0 && <span className="text-danger ml-1">({pUnans} unanswered)</span>}</span>
+                                  )}
+                                </span>
+                              </div>
+                              <button
+                                type="button"
+                                className="btn btn-secondary btn-sm text-xs py-1.5 px-3.5"
+                                onClick={() => {
+                                  setShowReviewModal(false);
+                                  handleSelectSection(sI);
+                                  handleSelectPart(pI, sI);
+                                }}
+                              >
+                                Review &rarr;
+                              </button>
+                            </div>
+                          );
+                        })}
                       </div>
-                      <button
-                        type="button"
-                        className="btn btn-secondary btn-sm text-xs py-1.5 px-3.5"
-                        onClick={() => {
-                          setShowReviewModal(false);
-                          handleSelectPart(pI);
-                        }}
-                      >
-                        Review &rarr;
-                      </button>
                     </div>
-                  );
-                })}
+                  ))
+                ) : (
+                  normalizedParts.map((p, pI) => {
+                    const partQs = p.questions || [];
+                    const pAns = partQs.filter((q) => isQuestionAnswered(q.id)).length;
+                    const pUnans = partQs.length - pAns;
+
+                    return (
+                      <div key={p.id || pI} className="flex-between align-center p-3.5 bg-slate-50 rounded-xl border">
+                        <div>
+                          <span className="text-sm font-bold text-dark block">{p.title || `Part ${pI + 1}`}</span>
+                          <span className="text-xs text-muted">
+                            {pAns === partQs.length ? (
+                              <strong className="text-success">✓ {pAns}/{partQs.length} answered</strong>
+                            ) : (
+                              <span>✓ {pAns}/{partQs.length} answered {pUnans > 0 && <span className="text-danger ml-1">({pUnans} unanswered)</span>}</span>
+                            )}
+                          </span>
+                        </div>
+                        <button
+                          type="button"
+                          className="btn btn-secondary btn-sm text-xs py-1.5 px-3.5"
+                          onClick={() => {
+                            setShowReviewModal(false);
+                            handleSelectPart(pI);
+                          }}
+                        >
+                          Review &rarr;
+                        </button>
+                      </div>
+                    );
+                  })
+                )}
               </div>
 
               {allQuestionsList.length - totalAnsweredCount > 0 && (

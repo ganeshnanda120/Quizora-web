@@ -1,6 +1,7 @@
 import { doc, setDoc } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { db, storage } from '../firebase';
+import { normalizeActivityQuestions } from '../utils/questionUtils';
 
 /**
  * Uploads a student answer file (e.g. photo or PDF of written work) to Firebase Storage
@@ -66,51 +67,7 @@ export const calculateMcqAutoGrades = (activity, answersMap = {}) => {
   let incorrectCount = 0;
   let unansweredCount = 0;
 
-  const toArr = (v) => (!v ? [] : Array.isArray(v) ? v : typeof v === 'object' ? Object.values(v) : []);
-  const allQuestions = [];
-  const seenQIds = new Set();
-
-  const addQ = (q, fallbackId) => {
-    if (!q || typeof q !== 'object') return;
-    let qId = q.id || fallbackId;
-    if (seenQIds.has(qId)) {
-      qId = `${qId}_${allQuestions.length + 1}`;
-    }
-    seenQIds.add(qId);
-    allQuestions.push({ ...q, id: qId });
-  };
-
-  // 1. Sections
-  const rawSections = toArr(activity?.sections);
-  if (rawSections.length > 0 && activity?.partMode === 'sections') {
-    rawSections.forEach((sec, sIdx) => {
-      toArr(sec.parts).forEach((p, pIdx) => {
-        toArr(p.questions || p.questionList || p.items).forEach((q, qIdx) => {
-          addQ(q, `sec_${sIdx + 1}_p_${pIdx + 1}_q_${qIdx + 1}`);
-        });
-      });
-      toArr(sec.questions || sec.questionList).forEach((q, qIdx) => {
-        addQ(q, `sec_${sIdx + 1}_q_${qIdx + 1}`);
-      });
-    });
-  } else {
-    // 2. Parts
-    const rawParts = toArr(activity?.parts);
-    if (rawParts.length > 0) {
-      rawParts.forEach((p, pIdx) => {
-        toArr(p.questions || p.questionList || p.items).forEach((q, qIdx) => {
-          addQ(q, `p_${pIdx + 1}_q_${qIdx + 1}`);
-        });
-      });
-    }
-
-    // 3. Root (Only if no questions collected from parts)
-    if (allQuestions.length === 0) {
-      toArr(activity?.questions || activity?.questionList || activity?.items).forEach((q, qIdx) => {
-        addQ(q, `q_root_${qIdx + 1}`);
-      });
-    }
-  }
+  const { allQuestions } = normalizeActivityQuestions(activity);
 
   allQuestions.forEach((q) => {
     if (q.type !== 'mcq') return;
@@ -193,22 +150,9 @@ export const submitStudentActivity = async (activityId, submissionPayload) => {
   // Calculate MCQ grades if autoGradeMCQ is on
   const mcqGrading = calculateMcqAutoGrades(submissionPayload.activity, submissionPayload.answers);
 
-  // Check if entire activity is MCQs only
-  let hasManualQuestions = false;
-  const toArrHelper = (v) => (!v ? [] : Array.isArray(v) ? v : typeof v === 'object' ? Object.values(v) : []);
-  const checkQ = (q) => {
-    if (q && q.type !== 'mcq') hasManualQuestions = true;
-  };
-  toArrHelper(submissionPayload.activity?.sections).forEach((sec) => {
-    toArrHelper(sec.parts).forEach((p) => {
-      toArrHelper(p.questions || p.questionList || p.items).forEach(checkQ);
-    });
-    toArrHelper(sec.questions || sec.questionList).forEach(checkQ);
-  });
-  toArrHelper(submissionPayload.activity?.parts).forEach((p) => {
-    toArrHelper(p.questions || p.questionList || p.items).forEach(checkQ);
-  });
-  toArrHelper(submissionPayload.activity?.questions || submissionPayload.activity?.questionList || submissionPayload.activity?.items).forEach(checkQ);
+  // Check if entire activity has manual questions
+  const { allQuestions } = normalizeActivityQuestions(submissionPayload.activity);
+  const hasManualQuestions = allQuestions.some((q) => q && q.type !== 'mcq');
 
   const finalPayload = {
     ...submissionPayload,

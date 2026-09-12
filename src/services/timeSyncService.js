@@ -8,6 +8,14 @@ let isSynchronized = false;
 let ongoingSyncPromise = null;
 
 /**
+ * Checks whether the server time has been successfully synchronized.
+ * @returns {boolean}
+ */
+export function isServerTimeSynchronized() {
+  return isSynchronized;
+}
+
+/**
  * Syncs the local browser clock with the server's real-time clock via HTTP Date header.
  * @returns {Promise<number>} Clock offset in milliseconds
  */

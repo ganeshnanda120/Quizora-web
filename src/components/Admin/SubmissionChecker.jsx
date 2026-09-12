@@ -1,21 +1,21 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { saveSubmissionGrade } from '../../services/adminService';
+import { normalizeActivityQuestions } from '../../utils/questionUtils';
 
 export default function SubmissionChecker({ submission, activity, onClose, onGraded }) {
+  const normalized = useMemo(() => normalizeActivityQuestions(activity), [activity]);
+
   const [grades, setGrades] = useState(() => {
-    // Initialized per-question marks awarded and feedback from submission if existing
     const initMap = {};
     const existingGrades = submission.questionGrades || {};
+    const norm = normalizeActivityQuestions(activity);
 
-    const parts = activity?.parts || [];
-    parts.forEach((p) => {
-      (p.questions || []).forEach((q) => {
-        const prev = existingGrades[q.id] || {};
-        initMap[q.id] = {
-          marksAwarded: prev.marksAwarded !== undefined ? prev.marksAwarded : (q.type === 'mcq' && activity.autoGradeMCQ ? (submission.autoMcqMarks?.[q.id] || 0) : ''),
-          feedback: prev.feedback || ''
-        };
-      });
+    norm.allQuestions.forEach((q) => {
+      const prev = existingGrades[q.id] || {};
+      initMap[q.id] = {
+        marksAwarded: prev.marksAwarded !== undefined ? prev.marksAwarded : (q.type === 'mcq' && activity?.autoGradeMCQ ? (submission.autoMcqMarks?.[q.id] || 0) : ''),
+        feedback: prev.feedback || ''
+      };
     });
     return initMap;
   });
@@ -44,29 +44,25 @@ export default function SubmissionChecker({ submission, activity, onClose, onGra
       let incorrectCount = 0;
       let unansweredCount = 0;
 
-      const parts = activity?.parts || [];
+      normalized.allQuestions.forEach((q) => {
+        const maxM = q.marks ? parseFloat(q.marks) : 0;
+        totalMaxMarks += maxM;
 
-      parts.forEach((p) => {
-        (p.questions || []).forEach((q) => {
-          const maxM = q.marks ? parseFloat(q.marks) : 0;
-          totalMaxMarks += maxM;
+        const studentAns = submission.answers?.[q.id];
 
-          const studentAns = submission.answers?.[q.id];
+        if (studentAns === undefined || studentAns === null || studentAns === '' || (Array.isArray(studentAns) && studentAns.length === 0)) {
+          unansweredCount++;
+        }
 
-          if (studentAns === undefined || studentAns === null || studentAns === '') {
-            unansweredCount++;
-          }
+        const qGrade = grades[q.id] || {};
+        const awarded = parseFloat(qGrade.marksAwarded || 0);
+        totalObtainedMarks += awarded;
 
-          const qGrade = grades[q.id] || {};
-          const awarded = parseFloat(qGrade.marksAwarded || 0);
-          totalObtainedMarks += awarded;
-
-          if (awarded === maxM && maxM > 0) {
-            correctCount++;
-          } else if (awarded < maxM && maxM > 0) {
-            incorrectCount++;
-          }
-        });
+        if (awarded === maxM && maxM > 0) {
+          correctCount++;
+        } else if (awarded < maxM && maxM > 0) {
+          incorrectCount++;
+        }
       });
 
       const percentage = totalMaxMarks > 0 ? ((totalObtainedMarks / totalMaxMarks) * 100).toFixed(1) : '100.0';
@@ -81,7 +77,7 @@ export default function SubmissionChecker({ submission, activity, onClose, onGra
         incorrectAnswers: incorrectCount,
         unansweredQuestions: unansweredCount,
         status: 'Checked',
-        checkedBy: activity.adminName || 'Admin'
+        checkedBy: activity?.adminName || 'Admin'
       };
 
       await saveSubmissionGrade(submission.submissionId, gradeResultPayload);
@@ -134,104 +130,127 @@ export default function SubmissionChecker({ submission, activity, onClose, onGra
 
         {/* Questions and Answers Review Workspace */}
         <div className="questions-checker-list">
-          {(activity?.parts || []).map((part, pIdx) => (
-            <div key={part.id || pIdx} className="part-checker-block mb-4">
-              <h4 className="part-checker-title">{part.title || `Part ${pIdx + 1}`}</h4>
+          {normalized.sections.map((section, sIdx) => (
+            <div key={section.id || sIdx} className="section-checker-block mb-4">
+              {normalized.isSectionBased && (
+                <h3 className="section-checker-title mb-2 text-primary font-bold">
+                  📁 Section: {section.title || `Section ${sIdx + 1}`}
+                </h3>
+              )}
+              {section.parts.map((part, pIdx) => (
+                <div key={part.id || pIdx} className="part-checker-block mb-4">
+                  <h4 className="part-checker-title">{part.title || `Part ${pIdx + 1}`}</h4>
 
-              {(part.questions || []).map((q, qIdx) => {
-                const studentAnswer = submission.answers?.[q.id];
-                const currentGrade = grades[q.id] || { marksAwarded: '', feedback: '' };
+                  {part.questions.map((q, qIdx) => {
+                    const studentAnswer = submission.answers?.[q.id];
+                    const currentGrade = grades[q.id] || { marksAwarded: '', feedback: '' };
 
-                return (
-                  <div key={q.id || qIdx} className="question-check-item">
-                    <div className="check-item-header">
-                      <span className="q-num">Q{qIdx + 1}.</span>
-                      <span className={`q-type-badge ${q.type}`}>{q.type.toUpperCase()}</span>
-                      <span className="q-max-marks">Max Marks: {q.marks || 'N/A'}</span>
-                    </div>
-
-                    <div className="q-prompt mt-2">
-                      <p className="q-text">{q.questionText || q.paperFileName}</p>
-                      {q.attachedFiles && q.attachedFiles.length > 0 && (
-                        <div className="checker-attached-files-list flex-align-center gap-2 mt-2 flex-wrap">
-                          {q.attachedFiles.map((af, afIdx) => (
-                            <a
-                              key={af.id || afIdx}
-                              href={af.url}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="btn btn-secondary btn-sm"
-                            >
-                              {af.type === 'image' ? '🖼️' : '📄'} {af.name || 'View Attachment'} ↗
-                            </a>
-                          ))}
+                    return (
+                      <div key={q.id || qIdx} className="question-check-item">
+                        <div className="check-item-header">
+                          <span className="q-num">Q{qIdx + 1}.</span>
+                          <span className={`q-type-badge ${q.type}`}>{q.type.toUpperCase()}</span>
+                          <span className="q-max-marks">Max Marks: {q.marks || 'N/A'}</span>
                         </div>
-                      )}
-                      {q.paperFileUrl && !q.attachedFiles?.length && (
-                        <div className="paper-link-box mt-2">
-                          <a href={q.paperFileUrl} target="_blank" rel="noopener noreferrer" className="btn btn-secondary btn-sm">
-                            📄 View Question Paper File
-                          </a>
-                        </div>
-                      )}
-                      {(q.answerGuidelines || q.description) && q.type === 'written' && (
-                        <div className="checker-guidelines-box mt-2 p-2 bg-light rounded text-xs text-muted">
-                          <strong>Guidelines:</strong> {q.answerGuidelines || q.description}
-                        </div>
-                      )}
-                    </div>
 
-                    {/* Student Submitted Answer Display */}
-                    <div className="student-answer-box mt-3">
-                      <span className="answer-lbl">Participant Answer:</span>
-                      <div className="answer-content">
-                        {q.type === 'mcq' ? (
-                          <div className="mcq-answer-display">
-                            <span>Selected Option: <strong>{studentAnswer !== undefined ? (q.options?.[studentAnswer] || studentAnswer) : 'No answer'}</strong></span>
-                            {q.correctIndices && (
-                              <div className="correct-ans-tag mt-1">
-                                Correct Choice(s): {q.correctIndices.map((ci) => q.options?.[ci]).join(', ')}
+                        <div className="q-prompt mt-2">
+                          <p className="q-text">{q.questionText || q.paperFileName || 'Question prompt'}</p>
+                          {q.attachedFiles && q.attachedFiles.length > 0 && (
+                            <div className="checker-attached-files-list flex-align-center gap-2 mt-2 flex-wrap">
+                              {q.attachedFiles.map((af, afIdx) => (
+                                <a
+                                  key={af.id || afIdx}
+                                  href={af.url}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="btn btn-secondary btn-sm"
+                                >
+                                  {af.type === 'image' ? '🖼️' : '📄'} {af.name || 'View Attachment'} ↗
+                                </a>
+                              ))}
+                            </div>
+                          )}
+                          {q.paperFileUrl && !q.attachedFiles?.length && (
+                            <div className="paper-link-box mt-2">
+                              <a href={q.paperFileUrl} target="_blank" rel="noopener noreferrer" className="btn btn-secondary btn-sm">
+                                📄 View Question Paper File
+                              </a>
+                            </div>
+                          )}
+                          {(q.answerGuidelines || q.description) && (q.type === 'written' || q.type === 'upload') && (
+                            <div className="checker-guidelines-box mt-2 p-2 bg-light rounded text-xs text-muted">
+                              <strong>Guidelines:</strong> {q.answerGuidelines || q.description}
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Student Submitted Answer Display */}
+                        <div className="student-answer-box mt-3">
+                          <span className="answer-lbl">Participant Answer:</span>
+                          <div className="answer-content">
+                            {q.type === 'mcq' ? (
+                              <div className="mcq-answer-display">
+                                <span>Selected Option: <strong>{studentAnswer !== undefined && studentAnswer !== '' ? (q.options?.[studentAnswer] || studentAnswer) : 'No answer'}</strong></span>
+                                {q.correctIndices && (
+                                  <div className="correct-ans-tag mt-1">
+                                    Correct Choice(s): {q.correctIndices.map((ci) => q.options?.[ci]).join(', ')}
+                                  </div>
+                                )}
                               </div>
+                            ) : q.type === 'upload' || (typeof studentAnswer === 'object' && studentAnswer?.url) ? (
+                              <div className="upload-answer-display">
+                                {typeof studentAnswer === 'string' && studentAnswer.startsWith('http') ? (
+                                  <a href={studentAnswer} target="_blank" rel="noopener noreferrer" className="btn btn-secondary btn-sm">
+                                    📁 Open Submitted File ↗
+                                  </a>
+                                ) : typeof studentAnswer === 'object' && studentAnswer?.url ? (
+                                  <a href={studentAnswer.url} target="_blank" rel="noopener noreferrer" className="btn btn-secondary btn-sm">
+                                    📁 Open {studentAnswer.name || 'Submitted File'} ↗
+                                  </a>
+                                ) : (
+                                  <p className="written-answer-text">{studentAnswer || 'No file or response submitted.'}</p>
+                                )}
+                              </div>
+                            ) : (
+                              <p className="written-answer-text">{studentAnswer || 'No response provided.'}</p>
                             )}
                           </div>
-                        ) : (
-                          <p className="written-answer-text">{studentAnswer || 'No response provided.'}</p>
-                        )}
-                      </div>
-                    </div>
+                        </div>
 
-                    {/* Admin Grading Controls */}
-                    <div className="grading-controls-row mt-3">
-                      <div className="form-group marks-input-group">
-                        <label className="form-label" htmlFor={`marks_${q.id}`}>Marks Awarded:</label>
-                        <input
-                          type="number"
-                          id={`marks_${q.id}`}
-                          className="form-input num-input"
-                          min="0"
-                          max={q.marks || 100}
-                          step="0.5"
-                          value={currentGrade.marksAwarded}
-                          onChange={(e) => handleGradeChange(q.id, 'marksAwarded', e.target.value)}
-                          placeholder="0"
-                        />
-                      </div>
+                        {/* Admin Grading Controls */}
+                        <div className="grading-controls-row mt-3">
+                          <div className="form-group marks-input-group">
+                            <label className="form-label" htmlFor={`marks_${q.id}`}>Marks Awarded:</label>
+                            <input
+                              type="number"
+                              id={`marks_${q.id}`}
+                              className="form-input num-input"
+                              min="0"
+                              max={q.marks || 100}
+                              step="0.5"
+                              value={currentGrade.marksAwarded}
+                              onChange={(e) => handleGradeChange(q.id, 'marksAwarded', e.target.value)}
+                              placeholder="0"
+                            />
+                          </div>
 
-                      <div className="form-group feedback-input-group">
-                        <label className="form-label" htmlFor={`fb_${q.id}`}>Feedback / Comments:</label>
-                        <input
-                          type="text"
-                          id={`fb_${q.id}`}
-                          className="form-input"
-                          placeholder="Add feedback for student..."
-                          value={currentGrade.feedback}
-                          onChange={(e) => handleGradeChange(q.id, 'feedback', e.target.value)}
-                        />
+                          <div className="form-group feedback-input-group">
+                            <label className="form-label" htmlFor={`fb_${q.id}`}>Feedback / Comments:</label>
+                            <input
+                              type="text"
+                              id={`fb_${q.id}`}
+                              className="form-input"
+                              placeholder="Add feedback for student..."
+                              value={currentGrade.feedback}
+                              onChange={(e) => handleGradeChange(q.id, 'feedback', e.target.value)}
+                            />
+                          </div>
+                        </div>
                       </div>
-                    </div>
-                  </div>
-                );
-              })}
+                    );
+                  })}
+                </div>
+              ))}
             </div>
           ))}
         </div>
