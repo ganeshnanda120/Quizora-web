@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import MCQEditorPage from './MCQEditorPage';
 import WrittenEditorPage from './WrittenEditorPage';
 import UploadEditorPage from './UploadEditorPage';
+import { saveActivityDraft } from '../../services/activityService';
 
 export default function Step3QuestionsSetup({
   activityId,
@@ -109,7 +110,11 @@ export default function Step3QuestionsSetup({
         parts: secParts
       };
 
+      const updatedPayload = { ...formData, sections: updatedSections };
       updateFormData({ sections: updatedSections });
+      if (activityId) {
+        saveActivityDraft(activityId, updatedPayload).catch((err) => console.warn('Draft auto-save warning:', err));
+      }
     } else {
       const updatedParts = [...parts];
       const targetPart = updatedParts[editingPartIndex] || { id: `part_${editingPartIndex + 1}`, title: `Part ${editingPartIndex + 1}`, questions: [] };
@@ -126,7 +131,11 @@ export default function Step3QuestionsSetup({
         questions: partQuestions
       };
 
+      const updatedPayload = { ...formData, parts: updatedParts };
       updateFormData({ parts: updatedParts });
+      if (activityId) {
+        saveActivityDraft(activityId, updatedPayload).catch((err) => console.warn('Draft auto-save warning:', err));
+      }
     }
 
     if (addMore) {
@@ -160,7 +169,11 @@ export default function Step3QuestionsSetup({
         parts: secParts
       };
 
+      const updatedPayload = { ...formData, sections: updatedSections };
       updateFormData({ sections: updatedSections });
+      if (activityId) {
+        saveActivityDraft(activityId, updatedPayload).catch((err) => console.warn('Draft auto-save warning:', err));
+      }
     } else {
       const updatedParts = [...parts];
       const partQuestions = (updatedParts[partIndex]?.questions || []).filter((_, idx) => idx !== qIdx);
@@ -170,7 +183,11 @@ export default function Step3QuestionsSetup({
         questions: partQuestions
       };
 
+      const updatedPayload = { ...formData, parts: updatedParts };
       updateFormData({ parts: updatedParts });
+      if (activityId) {
+        saveActivityDraft(activityId, updatedPayload).catch((err) => console.warn('Draft auto-save warning:', err));
+      }
     }
 
     setDeletingTarget(null);
@@ -200,7 +217,11 @@ export default function Step3QuestionsSetup({
         parts: secParts
       };
 
+      const updatedPayload = { ...formData, sections: updatedSections };
       updateFormData({ sections: updatedSections });
+      if (activityId) {
+        saveActivityDraft(activityId, updatedPayload).catch((err) => console.warn('Draft auto-save warning:', err));
+      }
     } else {
       const updatedParts = [...parts];
       const qList = [...(updatedParts[pIdx]?.questions || [])];
@@ -217,7 +238,11 @@ export default function Step3QuestionsSetup({
         questions: qList
       };
 
+      const updatedPayload = { ...formData, parts: updatedParts };
       updateFormData({ parts: updatedParts });
+      if (activityId) {
+        saveActivityDraft(activityId, updatedPayload).catch((err) => console.warn('Draft auto-save warning:', err));
+      }
     }
   };
 

@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useMemo } from 'react';
 import { getActivityById } from '../../services/activityService';
 import { submitStudentActivity } from '../../services/submissionService';
 import { syncServerTime, getSynchronizedTime, parseActivityTime } from '../../services/timeSyncService';
+import { normalizeActivityQuestions } from '../../utils/questionUtils';
 import StudentAttendancePaper from './StudentAttendancePaper';
 import StudentSubmissionResult from './StudentSubmissionResult';
 import logoImg from '../../assets/logo.png';
@@ -15,6 +16,8 @@ export default function StudentActivityScreen({
   const [activity, setActivity] = useState(null);
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
+
+  const normalizedData = useMemo(() => normalizeActivityQuestions(activity), [activity]);
 
   // Screen Flow States: 'landing' | 'participant_form' | 'attending' | 'submitted' | 'expired_notice'
   const [screenFlow, setScreenFlow] = useState('landing');
@@ -630,17 +633,26 @@ export default function StudentActivityScreen({
             </div>
           </div>
 
-          {/* START ACTIVITY BUTTON (ENABLED) */}
+          {normalizedData.totalQuestionCount === 0 && (
+            <div className="alert alert-warning mb-4 text-xs font-semibold">
+              <span>⚠️ No questions have been added to this activity yet. Please contact your coordinator.</span>
+            </div>
+          )}
+
+          {/* START ACTIVITY BUTTON */}
           <button
             type="button"
-            className="btn-start-active"
+            className={normalizedData.totalQuestionCount === 0 ? "btn-start-disabled" : "btn-start-active"}
             onClick={handleStartExamFlow}
+            disabled={normalizedData.totalQuestionCount === 0}
           >
-            <span>START ACTIVITY</span>
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-              <line x1="5" y1="12" x2="19" y2="12" />
-              <polyline points="12 5 19 12 12 19" />
-            </svg>
+            <span>{normalizedData.totalQuestionCount === 0 ? 'NO QUESTIONS AVAILABLE' : 'START ACTIVITY'}</span>
+            {normalizedData.totalQuestionCount > 0 && (
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <line x1="5" y1="12" x2="19" y2="12" />
+                <polyline points="12 5 19 12 12 19" />
+              </svg>
+            )}
           </button>
 
           {activity.endTime && (

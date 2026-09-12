@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import Step2BasicInfo from './Step2BasicInfo';
 import Step3QuestionsSetup from './Step3QuestionsSetup';
 import Step4ParticipantForm from './Step4ParticipantForm';
@@ -51,8 +51,18 @@ export default function CreateActivityWizard({ user, profileData, onClose, onAct
     ]
   });
 
+  const formDataRef = useRef(formData);
+
+  useEffect(() => {
+    formDataRef.current = formData;
+  }, [formData]);
+
   const updateFormData = (updates) => {
-    setFormData((prev) => ({ ...prev, ...updates }));
+    setFormData((prev) => {
+      const next = { ...prev, ...updates };
+      formDataRef.current = next;
+      return next;
+    });
   };
 
   // Sync state with browser history (Android Back button, swipe-back gesture, browser back/forward)
@@ -81,10 +91,11 @@ export default function CreateActivityWizard({ user, profileData, onClose, onAct
   }, [onClose]);
 
   // Step 1 (Basic Info) -> Step 2 (Questions): Save draft
-  const handleStep1Next = async () => {
+  const handleStep1Next = async (customData) => {
+    const payload = (customData && typeof customData === 'object' && !customData.nativeEvent) ? customData : formDataRef.current;
     setSaving(true);
     try {
-      await saveActivityDraft(activityId, formData);
+      await saveActivityDraft(activityId, payload);
       window.history.pushState({ wizardStep: 2, wizardOpen: true }, '', window.location.href);
       setCurrentStep(2);
     } catch (err) {
@@ -95,10 +106,11 @@ export default function CreateActivityWizard({ user, profileData, onClose, onAct
   };
 
   // Step 2 (Questions) -> Step 3 (Participant Form): Save draft with questions
-  const handleStep2Next = async () => {
+  const handleStep2Next = async (customData) => {
+    const payload = (customData && typeof customData === 'object' && !customData.nativeEvent) ? customData : formDataRef.current;
     setSaving(true);
     try {
-      await saveActivityDraft(activityId, formData);
+      await saveActivityDraft(activityId, payload);
       window.history.pushState({ wizardStep: 3, wizardOpen: true }, '', window.location.href);
       setCurrentStep(3);
     } catch (err) {
@@ -109,10 +121,11 @@ export default function CreateActivityWizard({ user, profileData, onClose, onAct
   };
 
   // Step 3 (Participant Form) -> Step 4 (Share Link): Finalize and Publish
-  const handleStep3Complete = async () => {
+  const handleStep3Complete = async (customData) => {
+    const payload = (customData && typeof customData === 'object' && !customData.nativeEvent) ? customData : formDataRef.current;
     setSaving(true);
     try {
-      const publishedPayload = await publishActivity(activityId, formData);
+      const publishedPayload = await publishActivity(activityId, payload);
       setPublishedUrl(publishedPayload.shareUrl);
       if (onActivityCreated) {
         onActivityCreated(publishedPayload);

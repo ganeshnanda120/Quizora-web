@@ -865,9 +865,33 @@ export default function StudentAttendancePaper({
                 Your responses for this part have been submitted and locked. You can view or proceed to the next available Part.
               </p>
             </div>
-          ) : !currentQuestion ? (
-            <div className="empty-part-box p-8 bg-white border rounded-2xl text-center">
-              <p className="text-muted font-medium m-0">No questions found in this Part.</p>
+          ) : !currentQuestion || activeQuestions.length === 0 ? (
+            <div className="empty-part-box p-8 bg-white border rounded-2xl text-center shadow-sm">
+              <div className="empty-icon-box mx-auto mb-3" style={{ width: '56px', height: '56px', borderRadius: '50%', background: '#f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#64748b' }}>
+                <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <circle cx="12" cy="12" r="10" />
+                  <line x1="12" y1="8" x2="12" y2="12" />
+                  <line x1="12" y1="16" x2="12.01" y2="16" />
+                </svg>
+              </div>
+              <h3 className="text-lg font-bold text-dark mb-1">No Questions in this Part</h3>
+              <p className="text-muted font-medium text-sm mb-4">No questions have been configured for {activePart?.title || 'this part'} yet.</p>
+              {activePartsList.length > 1 && (
+                <div className="flex-center gap-2 flex-wrap">
+                  {activePartsList.map((p, pIdx) => (
+                    pIdx !== safePartIdx && (
+                      <button
+                        key={p.id || pIdx}
+                        type="button"
+                        className="btn btn-secondary btn-sm"
+                        onClick={() => handleSelectPart(pIdx)}
+                      >
+                        Switch to {p.title || `Part ${pIdx + 1}`} ({(p.questions || []).length} Qs)
+                      </button>
+                    )
+                  ))}
+                </div>
+              )}
             </div>
           ) : (
             <div
@@ -1150,56 +1174,58 @@ export default function StudentAttendancePaper({
             </div>
           )}
 
-          {/* 3. BOTTOM NAVIGATION ACTIONS (Top: Question progress; Below: Previous & Next / Save & Move / Submit) */}
-          <div className="student-bottom-actions-container mt-7 bg-white border rounded-2xl p-4 sm:p-5 shadow-sm">
-            {/* Top Row: Question progress in this Part */}
-            <div className="student-bottom-counter-row text-center mb-3 pb-3 border-bottom">
-              <span className="font-bold text-xs sm:text-sm text-slate-700">
-                Question {safeQIdx + 1} of {activeQuestions.length} in this Part
-              </span>
-            </div>
-
-            {/* Bottom Row: Previous and Next / Save & Move buttons */}
-            <div className="student-bottom-btns-row flex-between align-center flex-wrap gap-3">
-              {/* Left: Previous Button (HIDDEN on Question 1) */}
-              <div className="student-bottom-btn-left">
-                {safeQIdx > 0 && (
-                  <button
-                    type="button"
-                    className="btn btn-secondary btn-md font-semibold"
-                    onClick={handlePrevQuestion}
-                  >
-                    &larr; Previous Question
-                  </button>
-                )}
+          {/* 3. BOTTOM NAVIGATION ACTIONS (Only rendered when part has questions) */}
+          {activeQuestions.length > 0 && (
+            <div className="student-bottom-actions-container mt-7 bg-white border rounded-2xl p-4 sm:p-5 shadow-sm">
+              {/* Top Row: Question progress in this Part */}
+              <div className="student-bottom-counter-row text-center mb-3 pb-3 border-bottom">
+                <span className="font-bold text-xs sm:text-sm text-slate-700">
+                  Question {safeQIdx + 1} of {activeQuestions.length} in this Part
+                </span>
               </div>
 
-              {/* Right: Next / Save & Move / Submit Button */}
-              <div className="student-bottom-btn-right ml-auto">
-                {!isLastQuestionOfPart ? (
-                  <button
-                    type="button"
-                    className="btn btn-primary btn-md font-bold"
-                    onClick={handleNextQuestion}
-                  >
-                    Next Question &rarr;
-                  </button>
-                ) : (
-                  <button
-                    type="button"
-                    className="btn btn-primary btn-md font-bold"
-                    onClick={handleCompletePartAction}
-                  >
-                    {!isMultiPart
-                      ? 'Submit Activity →'
-                      : partNavMode === 'individualTime'
-                        ? (isFinalPart ? 'Submit Part & Review Activity →' : 'Submit This Part →')
-                        : (isFinalPart ? 'Review & Submit Activity →' : 'Save & Move to Next Part →')}
-                  </button>
-                )}
+              {/* Bottom Row: Previous and Next / Save & Move buttons */}
+              <div className="student-bottom-btns-row flex-between align-center flex-wrap gap-3">
+                {/* Left: Previous Button (HIDDEN on Question 1) */}
+                <div className="student-bottom-btn-left">
+                  {safeQIdx > 0 && (
+                    <button
+                      type="button"
+                      className="btn btn-secondary btn-md font-semibold"
+                      onClick={handlePrevQuestion}
+                    >
+                      &larr; Previous Question
+                    </button>
+                  )}
+                </div>
+
+                {/* Right: Next / Save & Move / Submit Button */}
+                <div className="student-bottom-btn-right ml-auto">
+                  {!isLastQuestionOfPart ? (
+                    <button
+                      type="button"
+                      className="btn btn-primary btn-md font-bold"
+                      onClick={handleNextQuestion}
+                    >
+                      Next Question &rarr;
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      className="btn btn-primary btn-md font-bold"
+                      onClick={handleCompletePartAction}
+                    >
+                      {!isMultiPart
+                        ? 'Submit Activity →'
+                        : partNavMode === 'individualTime'
+                          ? (isFinalPart ? 'Submit Part & Review Activity →' : 'Submit This Part →')
+                          : (isFinalPart ? 'Review & Submit Activity →' : 'Save & Move to Next Part →')}
+                    </button>
+                  )}
+                </div>
               </div>
             </div>
-          </div>
+          )}
         </main>
       </div>
 
