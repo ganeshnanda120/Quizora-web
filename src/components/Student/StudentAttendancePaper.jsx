@@ -74,15 +74,29 @@ export default function StudentAttendancePaper({
   }, [activePartsList, safePartIdx]);
 
   const activeQuestions = useMemo(() => {
-    return activePart?.questions || [];
-  }, [activePart]);
+    if (activePart?.questions && activePart.questions.length > 0) {
+      return activePart.questions;
+    }
+    // Fallback 1: Check if any other part in activePartsList has questions
+    const nonNullPart = activePartsList.find((p) => p.questions && p.questions.length > 0);
+    if (nonNullPart?.questions?.length > 0) {
+      return nonNullPart.questions;
+    }
+    // Fallback 2: Global allQuestions fallback
+    if (allQuestionsList && allQuestionsList.length > 0) {
+      return allQuestionsList;
+    }
+    return [];
+  }, [activePart, activePartsList, allQuestionsList]);
 
   const safeQIdx = useMemo(() => {
     if (!activeQuestions || activeQuestions.length === 0) return 0;
     return Math.min(Math.max(0, activeQIdx), activeQuestions.length - 1);
   }, [activeQIdx, activeQuestions]);
 
-  const currentQuestion = activeQuestions[safeQIdx] || activeQuestions[0];
+  const currentQuestion = (activeQuestions && activeQuestions.length > 0)
+    ? (activeQuestions[safeQIdx] || activeQuestions[0] || null)
+    : null;
 
   // Answers Map: { [questionId]: value }
   const [answers, setAnswers] = useState(() => savedState?.answers || {});
@@ -365,17 +379,47 @@ export default function StudentAttendancePaper({
     return !!completedParts[key] || !!submittedParts[key];
   }, [activeSecIdx, completedParts, submittedParts]);
 
+  // Safe document opening (converts base64 Data URLs to Blob URLs so modern browsers don't block window.open)
+  const safeOpenUrl = (url) => {
+    if (!url) return;
+    if (typeof url === 'string' && url.startsWith('data:')) {
+      try {
+        const parts = url.split(',');
+        const mime = parts[0].match(/:(.*?);/)?.[1] || 'application/octet-stream';
+        const bstr = atob(parts[1]);
+        let n = bstr.length;
+        const u8arr = new Uint8Array(n);
+        while (n--) {
+          u8arr[n] = bstr.charCodeAt(n);
+        }
+        const blob = new Blob([u8arr], { type: mime });
+        const blobUrl = URL.createObjectURL(blob);
+        window.open(blobUrl, '_blank');
+        setTimeout(() => URL.revokeObjectURL(blobUrl), 60000);
+        return;
+      } catch (err) {
+        console.warn('Could not create blob URL from data URL:', err);
+      }
+    }
+    window.open(url, '_blank');
+  };
+
   // Answer change handlers
   const handleMcqSelect = (questionId, optionIndex, isMulti = false) => {
+    const numericOptIdx = Number(optionIndex);
     setAnswers((prev) => {
       const current = prev[questionId];
       if (isMulti) {
-        const currentArr = Array.isArray(current) ? [...current] : (current !== undefined && current !== null ? [current] : []);
-        const exists = currentArr.includes(optionIndex);
-        const updated = exists ? currentArr.filter((i) => i !== optionIndex) : [...currentArr, optionIndex];
+        const currentArr = Array.isArray(current)
+          ? [...current].map(Number)
+          : (current !== undefined && current !== null && current !== '' ? [Number(current)] : []);
+        const exists = currentArr.includes(numericOptIdx);
+        const updated = exists
+          ? currentArr.filter((i) => i !== numericOptIdx)
+          : [...currentArr, numericOptIdx];
         return { ...prev, [questionId]: updated };
       }
-      return { ...prev, [questionId]: optionIndex };
+      return { ...prev, [questionId]: numericOptIdx };
     });
   };
 
@@ -1006,75 +1050,98 @@ export default function StudentAttendancePaper({
                 </div>
               )}
 
-              {/* Attached Media / Diagrams (Images or PDFs) */}
-              {((currentQuestion.attachedFiles && currentQuestion.attachedFiles.length > 0) || currentQuestion.imageUrl || currentQuestion.paperFileUrl) && (
+              {/* Attached Media / Question Paper (Images or PDFs) */}
+              {((currentQuestion.attachedFiles && currentQuestion.attachedFiles.length > 0) || currentQuestion.imageUrl || currentQuestion.paperFileUrl || currentQuestion.fileUrl) && (
                 <div className="student-q-attachments-grid mb-5">
-                  {(currentQuestion.attachedFiles || []).map((fileItem, fIdx) => (
-                    <div key={fileItem.id || fIdx} className="student-attachment-card mb-3">
-                      {fileItem.type === 'image' || (!fileItem.type && fileItem.url?.match(/\.(jpg|jpeg|png|webp)/i)) ? (
-                        <div className="attachment-image-wrapper p-2 bg-slate-50 border rounded-xl">
-                          <img
-                            src={fileItem.url}
-                            alt={fileItem.name || 'Question attachment'}
-                            className="attachment-img max-h-80 object-contain rounded-lg border cursor-pointer hover:opacity-95"
-                            onClick={() => window.open(fileItem.url, '_blank')}
-                          />
-                          <span className="click-to-expand-hint text-xxs text-muted block mt-1.5 font-medium">
-                            ↗ Click image to view full size
-                          </span>
-                        </div>
-                      ) : (
-                        <div className="attachment-pdf-row flex-between align-center p-3.5 bg-slate-50 border rounded-xl">
-                          <div className="flex-align-center gap-2.5">
-                            <span className="pdf-icon-badge text-xs font-bold bg-danger text-white px-2.5 py-1 rounded">PDF</span>
-                            <span className="text-sm font-semibold text-dark truncate max-w-xs">{fileItem.name || 'Question Document'}</span>
-                          </div>
-                          <a
-                            href={fileItem.url}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="btn btn-secondary btn-sm"
-                          >
-                            View PDF ↗
-                          </a>
-                        </div>
-                      )}
-                    </div>
-                  ))}
+                  {(currentQuestion.attachedFiles && currentQuestion.attachedFiles.length > 0
+                    ? currentQuestion.attachedFiles
+                    : [{
+                        id: 'file_0',
+                        url: currentQuestion.fileUrl || currentQuestion.imageUrl || currentQuestion.paperFileUrl,
+                        name: currentQuestion.fileName || currentQuestion.paperFileName || 'Question Document',
+                        type: (currentQuestion.imageUrl || currentQuestion.fileType === 'image' || currentQuestion.fileUrl?.match(/\.(jpg|jpeg|png|webp|gif)(\?|$)/i) || currentQuestion.fileUrl?.startsWith('data:image/')) ? 'image' : 'pdf'
+                      }]
+                  ).map((fileItem, fIdx) => {
+                    const isImg = fileItem.type === 'image' ||
+                      fileItem.type?.startsWith('image') ||
+                      fileItem.name?.match(/\.(jpg|jpeg|png|webp|gif|svg)$/i) ||
+                      fileItem.url?.match(/\.(jpg|jpeg|png|webp|gif|svg)(\?|$)/i) ||
+                      fileItem.url?.startsWith('data:image/');
 
-                  {/* Legacy Attachment Fallback */}
-                  {(!currentQuestion.attachedFiles || currentQuestion.attachedFiles.length === 0) && (currentQuestion.imageUrl || currentQuestion.paperFileUrl) && (
-                    <div className="student-attachment-card mb-3">
-                      {currentQuestion.imageUrl ? (
-                        <div className="attachment-image-wrapper p-2 bg-slate-50 border rounded-xl">
-                          <img
-                            src={currentQuestion.imageUrl}
-                            alt="Question illustration"
-                            className="attachment-img max-h-80 object-contain rounded-lg border cursor-pointer hover:opacity-95"
-                            onClick={() => window.open(currentQuestion.imageUrl, '_blank')}
-                          />
-                          <span className="click-to-expand-hint text-xxs text-muted block mt-1.5 font-medium">
-                            ↗ Click image to view full size
-                          </span>
-                        </div>
-                      ) : (
-                        <div className="attachment-pdf-row flex-between align-center p-3.5 bg-slate-50 border rounded-xl">
-                          <div className="flex-align-center gap-2.5">
-                            <span className="pdf-icon-badge text-xs font-bold bg-danger text-white px-2.5 py-1 rounded">PDF</span>
-                            <span className="text-sm font-semibold text-dark">{currentQuestion.paperFileName || 'Question Paper'}</span>
+                    return (
+                      <div key={fileItem.id || fIdx} className="student-attachment-card mb-4">
+                        {isImg ? (
+                          <div className="attachment-image-wrapper p-3 bg-slate-50 border rounded-xl">
+                            <div className="flex-between align-center mb-2">
+                              <span className="text-xs font-bold text-muted uppercase">Image Attachment</span>
+                              <button
+                                type="button"
+                                className="btn btn-ghost btn-xs text-primary font-bold"
+                                onClick={() => safeOpenUrl(fileItem.url, fileItem.name)}
+                              >
+                                View Full Size ↗
+                              </button>
+                            </div>
+                            <img
+                              src={fileItem.url}
+                              alt={fileItem.name || 'Question attachment'}
+                              className="attachment-img max-h-96 object-contain rounded-lg border cursor-pointer hover:opacity-95"
+                              onClick={() => safeOpenUrl(fileItem.url, fileItem.name)}
+                            />
+                            <span className="click-to-expand-hint text-xxs text-muted block mt-1.5 font-medium text-center">
+                              ↗ Click image to view in new tab
+                            </span>
                           </div>
-                          <a
-                            href={currentQuestion.paperFileUrl}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="btn btn-secondary btn-sm"
-                          >
-                            View PDF ↗
-                          </a>
-                        </div>
-                      )}
-                    </div>
-                  )}
+                        ) : (
+                          <div className="attachment-pdf-container bg-slate-50 border rounded-xl overflow-hidden p-3.5">
+                            <div className="attachment-pdf-row flex-between align-center pb-2.5 mb-2.5 border-b">
+                              <div className="flex-align-center gap-2.5">
+                                <span className="pdf-icon-badge text-xs font-bold bg-danger text-white px-2.5 py-1 rounded">PDF</span>
+                                <div>
+                                  <span className="text-sm font-bold text-dark block truncate max-w-sm">
+                                    {fileItem.name || 'Question Document'}
+                                  </span>
+                                  {fileItem.sizeFormatted && (
+                                    <span className="text-xxs text-muted">{fileItem.sizeFormatted}</span>
+                                  )}
+                                </div>
+                              </div>
+                              <button
+                                type="button"
+                                className="btn btn-primary btn-sm font-semibold"
+                                onClick={() => safeOpenUrl(fileItem.url, fileItem.name)}
+                              >
+                                Open Document ↗
+                              </button>
+                            </div>
+
+                            {/* Embedded PDF Frame directly on student screen */}
+                            <div className="embedded-pdf-wrapper rounded-lg overflow-hidden border bg-white" style={{ minHeight: '380px', height: '52vh' }}>
+                              <object
+                                data={fileItem.url}
+                                type="application/pdf"
+                                width="100%"
+                                height="100%"
+                                className="w-full h-full"
+                                style={{ minHeight: '380px', display: 'block' }}
+                              >
+                                <div className="p-6 text-center text-muted">
+                                  <p className="text-sm font-semibold mb-2">PDF Document Ready</p>
+                                  <button
+                                    type="button"
+                                    className="btn btn-primary btn-sm"
+                                    onClick={() => safeOpenUrl(fileItem.url, fileItem.name)}
+                                  >
+                                    Click here to open and view PDF ↗
+                                  </button>
+                                </div>
+                              </object>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
                 </div>
               )}
 
@@ -1100,37 +1167,75 @@ export default function StudentAttendancePaper({
               {/* 1. MCQ OPTIONS RENDERER */}
               {(currentQuestion.type === 'mcq' || !currentQuestion.type) && (
                 <div className="student-mcq-options-container mt-4">
-                  <div className="student-mcq-options-grid flex flex-col gap-3">
-                    {(currentQuestion.options || []).map((opt, optIdx) => {
-                      const optLetter = String.fromCharCode(65 + optIdx);
-                      const isMulti = !!currentQuestion.allowMultipleChoices;
-                      const val = answers[currentQuestion.id];
-                      const isSelected = isMulti
-                        ? Array.isArray(val) && val.includes(optIdx)
-                        : val === optIdx;
+                  {/* Multiple answers notice */}
+                  {currentQuestion.allowMultipleChoices && (
+                    <div className="multi-choice-hint-badge mb-3 inline-flex items-center gap-1.5 px-3 py-1 bg-amber-50 border border-amber-200 rounded-lg text-xs font-semibold text-amber-800">
+                      <span>☑ Multiple answers allowed. Select all that apply.</span>
+                    </div>
+                  )}
 
-                      return (
-                        <div
-                          key={optIdx}
-                          className={`student-option-card flex-align-center gap-3.5 p-3.5 sm:p-4 rounded-xl border cursor-pointer transition-all ${isSelected ? 'option-selected' : 'option-default'}`}
-                          onClick={() => handleMcqSelect(currentQuestion.id, optIdx, isMulti)}
-                        >
-                          <div className={`option-selector-circle flex-center font-bold text-xs rounded-full border ${isSelected ? 'selector-selected' : 'selector-default'}`}>
-                            {isSelected ? '✓' : optLetter}
+                  {(!currentQuestion.options || currentQuestion.options.length === 0) ? (
+                    <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl text-center text-sm text-muted">
+                      No options configured for this question.
+                    </div>
+                  ) : (
+                    <div className="student-mcq-options-grid flex flex-col gap-3">
+                      {(currentQuestion.options || []).map((opt, optIdx) => {
+                        const optLetter = String.fromCharCode(65 + optIdx);
+                        const isMulti = !!currentQuestion.allowMultipleChoices;
+                        const val = answers[currentQuestion.id];
+                        const isSelected = isMulti
+                          ? Array.isArray(val) && val.map(Number).includes(optIdx)
+                          : (val !== undefined && val !== null && val !== '' && Number(val) === optIdx);
+                        const optText = (opt && typeof opt === 'object')
+                          ? (opt.text || opt.label || opt.value || opt.option || opt.choice || opt.title || `Option ${optIdx + 1}`)
+                          : String(opt || `Option ${optIdx + 1}`);
+
+                        return (
+                          <div
+                            key={optIdx}
+                            id={`mcq_opt_${currentQuestion.id}_${optIdx}`}
+                            role={isMulti ? 'checkbox' : 'radio'}
+                            aria-checked={isSelected}
+                            tabIndex={0}
+                            className={`student-mcq-option-btn student-option-card flex-align-center gap-3.5 p-3.5 sm:p-4 rounded-xl border cursor-pointer transition-all ${isSelected ? 'selected option-selected' : 'option-default'}`}
+                            onClick={() => handleMcqSelect(currentQuestion.id, optIdx, isMulti)}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter' || e.key === ' ') {
+                                e.preventDefault();
+                                handleMcqSelect(currentQuestion.id, optIdx, isMulti);
+                              }
+                            }}
+                          >
+                            {/* Option Letter Circle Badge: A, B, C... */}
+                            <div className={`option-letter-circle option-selector-circle flex-center font-bold text-xs rounded-full border ${isSelected ? 'selected selector-selected' : 'selector-default'}`}>
+                              {optLetter}
+                            </div>
+
+                            {/* Option Text */}
+                            <span className="option-text option-label-text font-semibold text-sm text-dark flex-1">
+                              {optText}
+                            </span>
+
+                            {/* Radio / Checkbox Selection Indicator */}
+                            <div className={`option-selection-indicator flex-center ${isSelected ? 'checked selector-selected' : ''}`}>
+                              {isMulti ? (
+                                <span className="indicator-check">{isSelected ? '✓' : ''}</span>
+                              ) : (
+                                <span className={`indicator-radio-dot ${isSelected ? 'active' : ''}`}></span>
+                              )}
+                            </div>
                           </div>
-                          <span className="option-label-text font-semibold text-sm text-dark flex-1">
-                            {opt}
-                          </span>
-                        </div>
-                      );
-                    })}
-                  </div>
+                        );
+                      })}
+                    </div>
+                  )}
 
                   {answers[currentQuestion.id] !== undefined && (
                     <div className="mt-3 flex-end">
                       <button
                         type="button"
-                        className="btn btn-ghost btn-xs text-muted"
+                        className="btn-clear-selection btn btn-ghost btn-xs text-muted hover:text-danger"
                         onClick={() => handleClearAnswer(currentQuestion.id)}
                       >
                         Clear Selection

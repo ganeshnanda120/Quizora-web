@@ -271,14 +271,23 @@ export default function UploadEditorPage({
     try {
       const effectiveActivityId = activityId || formData?.activityId || formData?.id || `act_${Date.now()}`;
 
-      // Upload any pending file objects to Firebase Storage
+      // Upload any pending file objects to Firebase Storage or safe persistent data URL
       const uploadedAttachedFiles = await Promise.all(
         attachedFiles.map(async (fItem) => {
           if (fItem.fileObj) {
             let uploadedUrl = await uploadActivityFile(effectiveActivityId, fItem.fileObj);
-            // If storage upload returned null or preview, fall back to existing preview url
-            if (!uploadedUrl && fItem.url) {
-              uploadedUrl = fItem.url;
+            // If storage upload did not return a remote URL or data URL, convert fileObj to persistent data URL
+            if (!uploadedUrl || uploadedUrl.startsWith('blob:')) {
+              try {
+                uploadedUrl = await new Promise((resolve) => {
+                  const reader = new FileReader();
+                  reader.onload = (e) => resolve(e.target.result || '');
+                  reader.onerror = () => resolve('');
+                  reader.readAsDataURL(fItem.fileObj);
+                });
+              } catch {
+                uploadedUrl = fItem.url || '';
+              }
             }
             return {
               id: fItem.id,
@@ -301,6 +310,7 @@ export default function UploadEditorPage({
       );
 
       const firstFile = uploadedAttachedFiles[0];
+      const isDataUrl = firstFile?.url?.startsWith('data:');
 
       const questionObj = {
         id: questionToEdit?.id || `q_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
@@ -311,12 +321,13 @@ export default function UploadEditorPage({
         answerGuidelines: answerGuidelines.trim(),
         description: answerGuidelines.trim(),
         attachedFiles: uploadedAttachedFiles,
+        // If firstFile.url is a heavy data URL, do not duplicate it across 4 fields to save Firestore bandwidth
         fileUrl: firstFile?.url || '',
         fileName: firstFile?.name || '',
         fileType: firstFile?.type || '',
-        paperFileUrl: firstFile?.url || '',
+        paperFileUrl: isDataUrl ? '' : (firstFile?.url || ''),
         paperFileName: firstFile?.name || '',
-        imageUrl: firstFile?.type === 'image' ? firstFile.url : '',
+        imageUrl: (firstFile?.type === 'image' && !isDataUrl) ? firstFile.url : '',
         createdAt: questionToEdit?.createdAt || new Date().toISOString()
       };
 

@@ -15,6 +15,61 @@ export const generateActivityId = () => {
 };
 
 /**
+ * Compress an image file using an off-screen HTML canvas
+ * @param {File} file 
+ * @param {number} maxWidth 
+ * @param {number} quality 
+ * @returns {Promise<File>}
+ */
+export const inlineCompressImage = async (file, maxWidth = 1200, quality = 0.8) => {
+  if (!file || !file.type?.startsWith('image/') || typeof window === 'undefined') {
+    return file;
+  }
+  return new Promise((resolve) => {
+    const img = new Image();
+    const url = URL.createObjectURL(file);
+    img.onload = () => {
+      URL.revokeObjectURL(url);
+      let { width, height } = img;
+      if (width > maxWidth || height > maxWidth) {
+        if (width > height) {
+          height = Math.round((height * maxWidth) / width);
+          width = maxWidth;
+        } else {
+          width = Math.round((width * maxWidth) / height);
+          height = maxWidth;
+        }
+      }
+      const canvas = document.createElement('canvas');
+      canvas.width = width;
+      canvas.height = height;
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(img, 0, 0, width, height);
+      canvas.toBlob(
+        (blob) => {
+          if (blob && blob.size < file.size) {
+            const compressedFile = new File([blob], file.name.replace(/\.[^.]+$/, '.jpg'), {
+              type: 'image/jpeg',
+              lastModified: Date.now()
+            });
+            resolve(compressedFile);
+          } else {
+            resolve(file);
+          }
+        },
+        'image/jpeg',
+        quality
+      );
+    };
+    img.onerror = () => {
+      URL.revokeObjectURL(url);
+      resolve(file);
+    };
+    img.src = url;
+  });
+};
+
+/**
  * Upload question paper (PDF/PNG/JPG) or question image to Firebase Storage at activities/{activityId}/questions/...
  * @param {string} activityId 
  * @param {File} file 
@@ -23,10 +78,20 @@ export const generateActivityId = () => {
 export const uploadActivityFile = async (activityId, file) => {
   if (!file || !activityId) return null;
 
+  // Pre-compress images to maximize speed and ensure small footprint
+  let processedFile = file;
+  if (file.type?.startsWith('image/')) {
+    try {
+      processedFile = await inlineCompressImage(file, 1200, 0.8);
+    } catch {
+      processedFile = file;
+    }
+  }
+
   try {
-    const filename = `${Date.now()}_${file.name.replace(/[^a-zA-Z0-9.-]/g, '_')}`;
+    const filename = `${Date.now()}_${processedFile.name.replace(/[^a-zA-Z0-9.-]/g, '_')}`;
     const storageRef = ref(storage, `activities/${activityId}/questions/${filename}`);
-    const snapshot = await uploadBytes(storageRef, file);
+    const snapshot = await uploadBytes(storageRef, processedFile);
     const downloadURL = await getDownloadURL(snapshot.ref);
     return downloadURL;
   } catch (err) {
@@ -35,7 +100,7 @@ export const uploadActivityFile = async (activityId, file) => {
       const reader = new FileReader();
       reader.onload = (e) => resolve(e.target.result || '');
       reader.onerror = () => resolve('');
-      reader.readAsDataURL(file);
+      reader.readAsDataURL(processedFile);
     });
   }
 };
@@ -151,6 +216,21 @@ export const saveActivityDraft = async (activityId, activityData) => {
     console.log(`[Quizora] Activity draft successfully persisted to Firestore: ${activityId}`);
   } catch (err) {
     console.warn("Firestore activity draft write notice:", err.message);
+    if (err.message && err.message.includes('exceeds the maximum allowed size')) {
+      try {
+        const slimmedPayload = JSON.parse(JSON.stringify(payload), (key, val) => {
+          if (typeof val === 'string' && val.startsWith('data:') && val.length > 200000 && (key === 'fileUrl' || key === 'paperFileUrl' || key === 'imageUrl')) {
+            return '';
+          }
+          return val;
+        });
+        const docRef = doc(db, 'activities', activityId);
+        await setDoc(docRef, slimmedPayload, { merge: true });
+        console.log(`[Quizora] Activity draft persisted with slimmed payload: ${activityId}`);
+      } catch (retryErr) {
+        console.warn("Firestore draft retry write notice:", retryErr.message);
+      }
+    }
   }
 
   return payload;
@@ -190,6 +270,22 @@ export const publishActivity = async (activityId, fullPayload) => {
     console.log(`[Quizora] Activity successfully published to Firestore: ${activityId}`);
   } catch (err) {
     console.warn("Firestore activity publish write notice:", err.message);
+    if (err.message && err.message.includes('exceeds the maximum allowed size')) {
+      try {
+        const slimmedPayload = JSON.parse(JSON.stringify(finalPayload), (key, val) => {
+          if (typeof val === 'string' && val.startsWith('data:') && val.length > 200000 && (key === 'fileUrl' || key === 'paperFileUrl' || key === 'imageUrl')) {
+            return '';
+          }
+          return val;
+        });
+        const docRef = doc(db, 'activities', activityId);
+        await setDoc(docRef, slimmedPayload, { merge: true });
+        console.log(`[Quizora] Activity successfully published with slimmed payload to Firestore: ${activityId}`);
+      } catch (retryErr) {
+        console.error("Firestore publish retry failed:", retryErr.message);
+        throw new Error("Activity contains documents that are too large for Firestore. Please upload smaller PDFs/images under 1MB.", { cause: retryErr });
+      }
+    }
   }
 
   return finalPayload;

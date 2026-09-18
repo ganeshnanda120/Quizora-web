@@ -144,13 +144,68 @@ export const normalizeQuestion = (q, fallbackId = 'q_1', fallbackIndex = 0) => {
     ? Number(rawNeg)
     : null;
 
-  // Options normalization (for MCQ)
-  const rawOptions = q.options || q.choices || q.answers;
-  const options = toArraySafe(rawOptions).map((opt, optIdx) => {
-    if (typeof opt === 'string') return opt;
-    if (opt && typeof opt === 'object') return opt.text || opt.label || opt.value || `Option ${optIdx + 1}`;
-    return String(opt || `Option ${optIdx + 1}`);
-  });
+  // Helper to reliably check if an attachment is an image or PDF
+  const isImageAttachment = (urlOrName, explicitType) => {
+    if (explicitType === 'image') return true;
+    if (explicitType === 'pdf') return false;
+    const str = String(urlOrName || '').toLowerCase();
+    if (str.startsWith('data:image/')) return true;
+    if (str.startsWith('data:application/pdf')) return false;
+    return /\.(jpg|jpeg|png|webp|gif|svg)(\?|$)/i.test(str);
+  };
+
+  // Options normalization (for MCQ): Supports string arrays, object maps, object arrays, and parsed JSON
+  let rawOptions = q.options ?? q.choices ?? q.answers ?? q.optionList ?? q.optionsList;
+  if (typeof rawOptions === 'string') {
+    try {
+      const parsed = JSON.parse(rawOptions);
+      if (Array.isArray(parsed) || (parsed && typeof parsed === 'object')) {
+        rawOptions = parsed;
+      }
+    } catch {
+      if (rawOptions.includes('\n')) {
+        rawOptions = rawOptions.split('\n').map((s) => s.trim()).filter(Boolean);
+      } else if (rawOptions.includes(',')) {
+        rawOptions = rawOptions.split(',').map((s) => s.trim()).filter(Boolean);
+      }
+    }
+  }
+
+  let rawOptionsArray = [];
+  if (Array.isArray(rawOptions)) {
+    rawOptionsArray = rawOptions;
+  } else if (rawOptions && typeof rawOptions === 'object') {
+    const keys = Object.keys(rawOptions);
+    const hasNumericKeys = keys.length > 0 && keys.every((k) => !isNaN(Number(k)));
+    if (hasNumericKeys) {
+      rawOptionsArray = keys.sort((a, b) => Number(a) - Number(b)).map((k) => rawOptions[k]);
+    } else {
+      rawOptionsArray = Object.values(rawOptions);
+    }
+  }
+
+  const options = rawOptionsArray
+    .filter((opt) => opt !== null && opt !== undefined)
+    .map((opt, optIdx) => {
+      if (typeof opt === 'string') return opt.trim();
+      if (typeof opt === 'number') return String(opt);
+      if (opt && typeof opt === 'object') {
+        const textVal =
+          opt.text ??
+          opt.label ??
+          opt.value ??
+          opt.option ??
+          opt.choice ??
+          opt.content ??
+          opt.title ??
+          opt.name;
+        if (textVal !== undefined && textVal !== null) {
+          return String(textVal).trim();
+        }
+      }
+      return `Option ${optIdx + 1}`;
+    })
+    .filter((opt) => opt !== '');
 
   // Correct options/indices normalization
   let correctIndices = [];
@@ -171,12 +226,30 @@ export const normalizeQuestion = (q, fallbackId = 'q_1', fallbackIndex = 0) => {
   }
 
   // Attached files normalization (Images / PDFs uploaded by Admin)
-  const rawAttached = q.attachedFiles || q.files || q.attachments || q.uploadedFiles || q.questionFiles;
+  const rawAttached =
+    q.attachedFiles ??
+    q.files ??
+    q.attachments ??
+    q.uploadedFiles ??
+    q.questionFiles;
+
   let attachedFiles = toArraySafe(rawAttached).map((fItem, fIdx) => {
-    if (!fItem || typeof fItem !== 'object') return null;
-    const fUrl = fItem.url || fItem.downloadUrl || fItem.fileUrl || '';
+    if (!fItem) return null;
+    if (typeof fItem === 'string') {
+      const isImg = isImageAttachment(fItem);
+      return {
+        id: `file_${fIdx + 1}`,
+        url: fItem,
+        name: `Attachment ${fIdx + 1}`,
+        type: isImg ? 'image' : 'pdf',
+        size: null,
+        sizeFormatted: ''
+      };
+    }
+    if (typeof fItem !== 'object') return null;
+    const fUrl = fItem.url || fItem.downloadUrl || fItem.fileUrl || fItem.previewUrl || '';
     const fName = fItem.name || fItem.fileName || fItem.paperFileName || 'Attached File';
-    const isImg = fItem.type === 'image' || (!fItem.type && fUrl.match(/\.(jpg|jpeg|png|webp)/i));
+    const isImg = isImageAttachment(fUrl, fItem.type) || isImageAttachment(fName);
     return {
       id: fItem.id || `file_${fIdx + 1}`,
       url: fUrl,
@@ -188,27 +261,42 @@ export const normalizeQuestion = (q, fallbackId = 'q_1', fallbackIndex = 0) => {
   }).filter((f) => f && f.url);
 
   // Fallback if legacy single file property was used
-  const singleUrl = q.fileUrl || q.imageUrl || q.paperFileUrl || q.url || q.downloadUrl || q.paperUrl;
+  const singleUrl =
+    q.fileUrl ||
+    q.imageUrl ||
+    q.paperFileUrl ||
+    q.url ||
+    q.downloadUrl ||
+    q.paperUrl;
+
   if (attachedFiles.length === 0 && singleUrl) {
     const singleName = q.fileName || q.paperFileName || q.name || 'Attached Document';
-    const isImg = q.fileType === 'image' || (!q.fileType && (q.imageUrl || singleUrl.match(/\.(jpg|jpeg|png|webp)/i)));
+    const isImg = isImageAttachment(singleUrl, q.fileType) || isImageAttachment(singleName);
     attachedFiles = [{
       id: 'file_0',
       url: singleUrl,
       name: singleName,
       type: isImg ? 'image' : 'pdf',
-      size: q.size || null,
+      size: q.size || q.fileSize || null,
       sizeFormatted: q.sizeFormatted || ''
     }];
   }
 
   const primaryFile = attachedFiles[0] || null;
 
+  // Auto-classify upload question if attached file exists and question has no MCQ options
+  let finalQType = qType;
+  if (!rawTypeCandidate && attachedFiles.length > 0 && options.length === 0) {
+    finalQType = 'upload';
+  } else if (isUploadType) {
+    finalQType = 'upload';
+  }
+
   return {
     ...q,
     id: String(stableId),
     index: fallbackIndex,
-    type: qType,
+    type: finalQType,
     questionText: q.questionText || q.text || q.prompt || q.title || '',
     marks: numericMarks,
     negativeMark: numericNeg,

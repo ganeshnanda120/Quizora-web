@@ -8663,7 +8663,8 @@ img, video, canvas, svg {
   gap: 12px !important;
 }
 
-.student-mcq-option-btn {
+.student-mcq-option-btn,
+.student-option-card {
   background: #ffffff !important;
   border: 1.5px solid #e2e8f0 !important;
   border-radius: 14px !important;
@@ -8671,33 +8672,48 @@ img, video, canvas, svg {
   cursor: pointer !important;
   width: 100% !important;
   position: relative !important;
-  transition: all 0.15s ease !important;
+  transition: all 0.18s cubic-bezier(0.16, 1, 0.3, 1) !important;
   text-align: left !important;
   font-family: inherit !important;
   display: flex !important;
   align-items: center !important;
   gap: 16px !important;
   box-sizing: border-box !important;
+  user-select: none !important;
 }
 
-.student-mcq-option-btn:hover {
+.student-mcq-option-btn:hover,
+.student-option-card:hover {
   background: #f8fafc !important;
-  border-color: #cbd5e1 !important;
+  border-color: #94a3b8 !important;
+  transform: translateY(-1.5px) !important;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.04) !important;
+}
+
+.student-mcq-option-btn:focus-visible,
+.student-option-card:focus-visible {
+  outline: 2.5px solid #4f46e5 !important;
+  outline-offset: 2px !important;
+}
+
+.student-mcq-option-btn.selected,
+.student-mcq-option-btn.option-selected,
+.student-option-card.selected,
+.student-option-card.option-selected {
+  background: #eff6ff !important;
+  border: 2px solid #4f46e5 !important;
+  box-shadow: 0 4px 16px rgba(79, 70, 229, 0.15) !important;
   transform: translateY(-1px) !important;
 }
 
-.student-mcq-option-btn.selected {
-  background: #eef2ff !important;
-  border-color: var(--primary, #4f46e5) !important;
-  box-shadow: 0 2px 10px rgba(79, 70, 229, 0.12) !important;
-}
-
-.option-letter-circle {
-  width: 32px !important;
-  height: 32px !important;
+.option-letter-circle,
+.option-selector-circle {
+  width: 34px !important;
+  height: 34px !important;
   border-radius: 50% !important;
   background: #f1f5f9 !important;
   color: #475569 !important;
+  border: 1px solid #e2e8f0 !important;
   display: inline-flex !important;
   align-items: center !important;
   justify-content: center !important;
@@ -8707,37 +8723,75 @@ img, video, canvas, svg {
   transition: all 0.15s ease !important;
 }
 
-.option-letter-circle.selected {
-  background: var(--primary, #4f46e5) !important;
+.option-letter-circle.selected,
+.option-letter-circle.selector-selected,
+.option-selector-circle.selected,
+.option-selector-circle.selector-selected {
+  background: #4f46e5 !important;
+  border-color: #4f46e5 !important;
   color: #ffffff !important;
+  box-shadow: 0 2px 6px rgba(79, 70, 229, 0.28) !important;
 }
 
-.option-text {
+.option-text,
+.option-label-text {
   font-size: 0.95rem !important;
   line-height: 1.5 !important;
   color: #1e293b !important;
   flex: 1 !important;
   word-break: break-word !important;
+  font-weight: 500 !important;
 }
 
+.student-mcq-option-btn.selected .option-text,
+.student-option-card.option-selected .option-label-text {
+  color: #0f172a !important;
+  font-weight: 600 !important;
+}
+
+/* Radio & Checkbox Selection Indicator Control */
 .option-selection-indicator {
-  width: 22px !important;
-  height: 22px !important;
+  width: 24px !important;
+  height: 24px !important;
   border-radius: 50% !important;
-  border: 1.5px solid #cbd5e1 !important;
+  border: 2px solid #cbd5e1 !important;
+  background: #ffffff !important;
   display: flex !important;
   align-items: center !important;
   justify-content: center !important;
-  font-size: 0.8rem !important;
-  color: transparent !important;
   flex-shrink: 0 !important;
   transition: all 0.15s ease !important;
 }
 
-.option-selection-indicator.checked {
-  border-color: var(--primary, #4f46e5) !important;
-  background: var(--primary, #4f46e5) !important;
+.student-option-card[role="checkbox"] .option-selection-indicator,
+.student-mcq-option-btn[role="checkbox"] .option-selection-indicator {
+  border-radius: 6px !important;
+}
+
+.option-selection-indicator.checked,
+.option-selection-indicator.selector-selected {
+  border-color: #4f46e5 !important;
+  background: #4f46e5 !important;
+}
+
+.indicator-radio-dot {
+  width: 0px;
+  height: 0px;
+  border-radius: 50%;
+  background: #ffffff;
+  transition: all 0.15s ease;
+}
+
+.indicator-radio-dot.active {
+  width: 10px !important;
+  height: 10px !important;
+}
+
+.indicator-check {
   color: #ffffff !important;
+  font-size: 13px !important;
+  font-weight: 800 !important;
+  line-height: 1 !important;
 }
 
 .btn-clear-selection {
@@ -8746,8 +8800,30 @@ img, video, canvas, svg {
   cursor: pointer !important;
   padding: 6px 12px !important;
   border-radius: 6px !important;
-  font-size: 0.775rem !important;
-  transition: color 0.15s ease !important;
+  font-size: 0.8rem !important;
+  font-weight: 600 !important;
+  transition: all 0.15s ease !important;
+}
+
+/* Embedded PDF and Attachment styles */
+.attachment-pdf-container {
+  background: #f8fafc !important;
+  border: 1.5px solid #e2e8f0 !important;
+  border-radius: 14px !important;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.03) !important;
+}
+
+.embedded-pdf-wrapper {
+  background: #ffffff !important;
+  border: 1px solid #e2e8f0 !important;
+  box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.05) !important;
+}
+
+.multi-choice-hint-badge {
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 6px !important;
+  font-weight: 600 !important;
 }
 
 .student-written-input-container {
