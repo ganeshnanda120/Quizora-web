@@ -142,7 +142,7 @@ export default function SubmissionChecker({ submission, activity, onClose, onGra
                   <h4 className="part-checker-title">{part.title || `Part ${pIdx + 1}`}</h4>
 
                   {part.questions.map((q, qIdx) => {
-                    const studentAnswer = submission.answers?.[q.id];
+                    const studentAnswer = submission.answers?.[q.id] || submission.answers?.[`${q.id}_files`];
                     const currentGrade = grades[q.id] || { marksAwarded: '', feedback: '' };
 
                     return (
@@ -197,9 +197,24 @@ export default function SubmissionChecker({ submission, activity, onClose, onGra
                                   </div>
                                 )}
                               </div>
-                            ) : q.type === 'upload' || (typeof studentAnswer === 'object' && studentAnswer?.url) ? (
+                            ) : q.type === 'upload' || (typeof studentAnswer === 'object' && studentAnswer?.url) || Array.isArray(studentAnswer) ? (
                               <div className="upload-answer-display">
-                                {typeof studentAnswer === 'string' && studentAnswer.startsWith('http') ? (
+                                {Array.isArray(studentAnswer) && studentAnswer.length > 0 ? (
+                                  <div className="flex flex-col gap-2">
+                                    {studentAnswer.map((fileObj, fIdx) => (
+                                      <div key={fileObj.id || fIdx} className="flex-align-center gap-2">
+                                        <a
+                                          href={fileObj.url}
+                                          target="_blank"
+                                          rel="noopener noreferrer"
+                                          className="btn btn-secondary btn-sm"
+                                        >
+                                          📁 Open {fileObj.name || `Uploaded File ${fIdx + 1}`} ↗
+                                        </a>
+                                      </div>
+                                    ))}
+                                  </div>
+                                ) : typeof studentAnswer === 'string' && (studentAnswer.startsWith('http') || studentAnswer.startsWith('data:')) ? (
                                   <a href={studentAnswer} target="_blank" rel="noopener noreferrer" className="btn btn-secondary btn-sm">
                                     📁 Open Submitted File ↗
                                   </a>
@@ -208,7 +223,12 @@ export default function SubmissionChecker({ submission, activity, onClose, onGra
                                     📁 Open {studentAnswer.name || 'Submitted File'} ↗
                                   </a>
                                 ) : (
-                                  <p className="written-answer-text">{studentAnswer || 'No file or response submitted.'}</p>
+                                  <p className="written-answer-text">{typeof studentAnswer === 'string' && studentAnswer ? studentAnswer : 'No file or response submitted.'}</p>
+                                )}
+                                {submission.answers?.[`${q.id}_notes`] && (
+                                  <p className="student-notes-quote mt-2 text-xs text-muted">
+                                    <strong>Notes:</strong> {submission.answers[`${q.id}_notes`]}
+                                  </p>
                                 )}
                               </div>
                             ) : (

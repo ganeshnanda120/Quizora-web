@@ -141,10 +141,9 @@ export default function Step3QuestionsSetup({
     if (addMore) {
       setEditingQuestionIndex(null);
     } else {
+      resetQuestionForm();
       if (window.history.state?.subEditor) {
         window.history.back();
-      } else {
-        resetQuestionForm();
       }
     }
   };
@@ -505,12 +504,34 @@ export default function Step3QuestionsSetup({
 
                                     <div className="q-card-text-body mt-1">
                                       <p className="q-text-prompt">
-                                        {(q.type === 'upload' || q.type === 'upload_paper')
-                                          ? (q.attachedFiles?.length
-                                              ? `Uploaded: ${q.attachedFiles.map((f) => f.name).join(', ')}`
-                                              : (q.fileName || q.paperFileName ? `Uploaded: ${q.fileName || q.paperFileName}` : 'Uploaded Image/PDF file(s)'))
-                                          : q.questionText}
+                                        {q.questionText || (
+                                          (q.type === 'upload' || q.type === 'upload_paper')
+                                            ? (q.attachedFiles?.length
+                                                ? `Uploaded: ${q.attachedFiles.map((f) => f.name).join(', ')}`
+                                                : (q.fileName || q.paperFileName ? `Uploaded: ${q.fileName || q.paperFileName}` : 'Uploaded Image/PDF file(s)'))
+                                            : ''
+                                        )}
                                       </p>
+                                      {(q.type === 'upload' || q.type === 'upload_paper') && (q.attachedFiles?.length > 0 || q.fileUrl || q.paperFileUrl) && (
+                                        <div className="q-card-files-badge-list mt-1 flex-align-center gap-1.5 flex-wrap">
+                                          {(q.attachedFiles?.length > 0 ? q.attachedFiles : [{ name: q.fileName || q.paperFileName || 'Attached File', url: q.fileUrl || q.paperFileUrl }]).map((f, fIdx) => (
+                                            f.url ? (
+                                              <a
+                                                key={f.id || fIdx}
+                                                href={f.url}
+                                                target="_blank"
+                                                rel="noopener noreferrer"
+                                                className="badge badge-primary text-xs"
+                                                style={{ textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
+                                                onClick={(e) => e.stopPropagation()}
+                                                title="Click to view file"
+                                              >
+                                                📎 {f.name || 'File'} ↗
+                                              </a>
+                                            ) : null
+                                          ))}
+                                        </div>
+                                      )}
                                     </div>
 
                                     <div className="q-card-meta-row mt-2">
@@ -658,12 +679,34 @@ export default function Step3QuestionsSetup({
 
                             <div className="q-card-text-body mt-1">
                               <p className="q-text-prompt">
-                                {(q.type === 'upload' || q.type === 'upload_paper')
-                                  ? (q.attachedFiles?.length
-                                      ? `Uploaded: ${q.attachedFiles.map((f) => f.name).join(', ')}`
-                                      : (q.fileName || q.paperFileName ? `Uploaded: ${q.fileName || q.paperFileName}` : 'Uploaded Image/PDF file(s)'))
-                                  : q.questionText}
+                                {q.questionText || (
+                                  (q.type === 'upload' || q.type === 'upload_paper')
+                                    ? (q.attachedFiles?.length
+                                        ? `Uploaded: ${q.attachedFiles.map((f) => f.name).join(', ')}`
+                                        : (q.fileName || q.paperFileName ? `Uploaded: ${q.fileName || q.paperFileName}` : 'Uploaded Image/PDF file(s)'))
+                                    : ''
+                                )}
                               </p>
+                              {(q.type === 'upload' || q.type === 'upload_paper') && (q.attachedFiles?.length > 0 || q.fileUrl || q.paperFileUrl) && (
+                                <div className="q-card-files-badge-list mt-1 flex-align-center gap-1.5 flex-wrap">
+                                  {(q.attachedFiles?.length > 0 ? q.attachedFiles : [{ name: q.fileName || q.paperFileName || 'Attached File', url: q.fileUrl || q.paperFileUrl }]).map((f, fIdx) => (
+                                    f.url ? (
+                                      <a
+                                        key={f.id || fIdx}
+                                        href={f.url}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="badge badge-primary text-xs"
+                                        style={{ textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
+                                        onClick={(e) => e.stopPropagation()}
+                                        title="Click to view file"
+                                      >
+                                        📎 {f.name || 'File'} ↗
+                                      </a>
+                                    ) : null
+                                  ))}
+                                </div>
+                              )}
                             </div>
 
                             <div className="q-card-meta-row mt-2">
@@ -1199,7 +1242,7 @@ export default function Step3QuestionsSetup({
       {/* FULL-SCREEN UPLOAD QUESTION EDITOR PAGE */}
       {(editorMode === 'upload' || editorMode === 'upload_paper') && (
         <UploadEditorPage
-          activityId={activityId}
+          activityId={activityId || formData?.activityId || formData?.id}
           formData={formData}
           sectionName={activeModalSection?.name}
           part={activeModalPart}

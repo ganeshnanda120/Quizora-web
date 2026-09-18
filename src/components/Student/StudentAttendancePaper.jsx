@@ -19,7 +19,8 @@ export default function StudentAttendancePaper({
     isSectionBased,
     sections,
     parts: normalizedParts,
-    allQuestions: allQuestionsList
+    allQuestions: allQuestionsList,
+    questionsById
   } = normalizedData;
 
   // Session storage key
@@ -139,6 +140,7 @@ export default function StudentAttendancePaper({
   const [showUnansweredWarningModal, setShowUnansweredWarningModal] = useState(false);
   const [showReviewModal, setShowReviewModal] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [submissionValidationError, setSubmissionValidationError] = useState('');
 
   // Submitted parts tracking (specifically for individualTime mode where submitted parts cannot be edited)
   const [submittedParts, setSubmittedParts] = useState(() => savedState?.submittedParts || {});
@@ -265,17 +267,52 @@ export default function StudentAttendancePaper({
     }
   }, [cacheKey, activityId, participantData, answers, visitedQuestions, completedParts, submittedParts, sessionStartTime, activeSecIdx, activePartIdx, activeQIdx]);
 
+  // Helper to extract clean array of uploaded answer files for a question
+  const getUploadedAnswerFiles = useCallback((questionId) => {
+    const raw = answers[questionId] || answers[`${questionId}_files`];
+    if (Array.isArray(raw)) {
+      return raw.filter((item) => item && typeof item === 'object' && item.url);
+    }
+    if (raw && typeof raw === 'object' && raw.url) {
+      return [raw];
+    }
+    if (typeof raw === 'string' && (raw.startsWith('http') || raw.startsWith('data:'))) {
+      return [{
+        id: `file_${questionId}_0`,
+        url: raw,
+        name: 'Uploaded Answer File',
+        type: raw.match(/\.(jpg|jpeg|png|webp)/i) ? 'image' : 'pdf'
+      }];
+    }
+    return [];
+  }, [answers]);
+
   // Check if a question is answered
   const isQuestionAnswered = useCallback((questionId) => {
+    const q = questionsById?.[questionId];
     const val = answers[questionId];
-    const files = answers[`${questionId}_files`];
-    const notes = answers[`${questionId}_notes`];
-    if (files && Array.isArray(files) && files.length > 0) return true;
-    if (notes && typeof notes === 'string' && notes.trim() !== '') return true;
-    if (val === undefined || val === null || val === '') return false;
-    if (Array.isArray(val) && val.length === 0) return false;
-    return true;
-  }, [answers]);
+    const uploadedFiles = getUploadedAnswerFiles(questionId);
+
+    // For Upload questions: considered answered ONLY if a valid file has been selected/uploaded
+    if (q?.type === 'upload' || q?.type === 'upload_paper') {
+      return uploadedFiles.length > 0;
+    }
+
+    // For Written questions:
+    if (q?.type === 'written') {
+      return typeof val === 'string' && val.trim().length > 0;
+    }
+
+    // For MCQ:
+    if (Array.isArray(val)) return val.length > 0;
+    if (typeof val === 'number') return true;
+    if (val !== undefined && val !== null && val !== '') return true;
+
+    // Fallback:
+    if (uploadedFiles.length > 0) return true;
+    if (typeof val === 'string' && val.trim().length > 0) return true;
+    return false;
+  }, [answers, questionsById, getUploadedAnswerFiles]);
 
   // Count answered questions in active part
   const activePartAnsweredCount = useMemo(() => {
@@ -352,13 +389,17 @@ export default function StudentAttendancePaper({
   const handleFileUpload = async (keyOrQuestionId, file) => {
     if (!file) return;
     setUploadError('');
+    setSubmissionValidationError('');
     setUploadingQId(keyOrQuestionId);
 
     try {
       const uploadedFile = await uploadStudentAnswerFile(activityId, file);
       if (uploadedFile) {
         setAnswers((prev) => {
-          const currentList = Array.isArray(prev[keyOrQuestionId]) ? [...prev[keyOrQuestionId]] : [];
+          const existing = prev[keyOrQuestionId] || prev[`${keyOrQuestionId}_files`];
+          const currentList = Array.isArray(existing)
+            ? [...existing]
+            : (existing && typeof existing === 'object' && existing.url ? [existing] : []);
           return {
             ...prev,
             [keyOrQuestionId]: [...currentList, uploadedFile]
@@ -375,12 +416,19 @@ export default function StudentAttendancePaper({
 
   const handleRemoveUploadedFile = (keyOrQuestionId, fileId) => {
     setAnswers((prev) => {
-      const currentList = Array.isArray(prev[keyOrQuestionId]) ? [...prev[keyOrQuestionId]] : [];
+      const existing = prev[keyOrQuestionId] || prev[`${keyOrQuestionId}_files`];
+      const currentList = Array.isArray(existing)
+        ? [...existing]
+        : (existing && typeof existing === 'object' && existing.url ? [existing] : []);
       const updated = currentList.filter((f) => f.id !== fileId);
-      return {
+      const nextAnswers = {
         ...prev,
         [keyOrQuestionId]: updated
       };
+      if (prev[`${keyOrQuestionId}_files`]) {
+        delete nextAnswers[`${keyOrQuestionId}_files`];
+      }
+      return nextAnswers;
     });
   };
 
@@ -496,6 +544,24 @@ export default function StudentAttendancePaper({
   };
 
   const handleConfirmSubmit = async () => {
+    setSubmissionValidationError('');
+
+    // Check if any required Upload question has no uploaded file
+    const unuploadedRequiredQ = allQuestionsList.find((q) => {
+      if ((q.type === 'upload' || q.type === 'upload_paper') && q.answerRequired === true) {
+        return !isQuestionAnswered(q.id);
+      }
+      return false;
+    });
+
+    if (unuploadedRequiredQ) {
+      const qIndexInAll = allQuestionsList.findIndex((q) => q.id === unuploadedRequiredQ.id);
+      setSubmissionValidationError(
+        `Please upload the required answer file for Question ${qIndexInAll + 1} (${unuploadedRequiredQ.questionText || unuploadedRequiredQ.fileName || 'Upload Question'}) before submitting.`
+      );
+      return;
+    }
+
     setSubmitting(true);
     try {
       if (onSubmit) {
@@ -503,6 +569,7 @@ export default function StudentAttendancePaper({
       }
     } catch (err) {
       console.error("Submit error:", err);
+      setSubmissionValidationError("Failed to submit activity. Please check your internet connection.");
     } finally {
       setSubmitting(false);
       setShowReviewModal(false);
@@ -1129,15 +1196,15 @@ export default function StudentAttendancePaper({
                   </div>
 
                   {/* Uploaded Files List */}
-                  {Array.isArray(answers[currentQuestion.id]) && answers[currentQuestion.id].length > 0 && (
+                  {getUploadedAnswerFiles(currentQuestion.id).length > 0 && (
                     <div className="uploaded-files-list mt-3 flex flex-col gap-2">
-                      {answers[currentQuestion.id].map((fileObj, fIdx) => (
+                      {getUploadedAnswerFiles(currentQuestion.id).map((fileObj, fIdx) => (
                         <div key={fileObj.id || fIdx} className="uploaded-file-row flex-between align-center p-3 bg-white border rounded-xl shadow-xs">
                           <div className="flex-align-center gap-2.5">
                             <span className="file-icon-badge text-xs font-bold bg-primary text-white px-2 py-0.5 rounded">
                               {fileObj.type === 'image' ? 'IMG' : 'PDF'}
                             </span>
-                            <span className="text-xs font-semibold text-dark truncate max-w-xs">{fileObj.name}</span>
+                            <span className="text-xs font-semibold text-dark truncate max-w-xs">{fileObj.name || 'Answer File'}</span>
                           </div>
                           <div className="flex-align-center gap-2">
                             <a href={fileObj.url} target="_blank" rel="noopener noreferrer" className="btn btn-ghost btn-xs text-primary font-bold">
@@ -1417,6 +1484,12 @@ export default function StudentAttendancePaper({
                   })
                 )}
               </div>
+
+              {submissionValidationError && (
+                <div className="alert alert-danger py-2.5 text-xs mb-3 font-semibold">
+                  <span>🚫 {submissionValidationError}</span>
+                </div>
+              )}
 
               {allQuestionsList.length - totalAnsweredCount > 0 && (
                 <div className="alert alert-warning py-2.5 text-xs mb-0">

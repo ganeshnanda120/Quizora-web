@@ -27,10 +27,21 @@ export const toArraySafe = (val) => {
     if (
       val.questionText !== undefined ||
       val.type !== undefined ||
+      val.questionType !== undefined ||
+      val.question_type !== undefined ||
+      val.qType !== undefined ||
       val.options !== undefined ||
       val.marks !== undefined ||
+      val.mark !== undefined ||
       val.fileName !== undefined ||
       val.paperFileName !== undefined ||
+      val.fileUrl !== undefined ||
+      val.paperFileUrl !== undefined ||
+      val.imageUrl !== undefined ||
+      val.attachedFiles !== undefined ||
+      val.files !== undefined ||
+      val.attachments !== undefined ||
+      val.uploadedFiles !== undefined ||
       val.answerGuidelines !== undefined
     ) {
       return [val];
@@ -64,12 +75,57 @@ export const normalizeQuestion = (q, fallbackId = 'q_1', fallbackIndex = 0) => {
   const stableId = q.id || q._id || q.questionId || fallbackId;
 
   // Normalized question type: 'mcq' | 'written' | 'upload'
-  let qType = String(q.type || 'mcq').toLowerCase().trim();
-  if (qType === 'upload_paper' || qType === 'uploadpaper' || qType === 'paper' || qType === 'file') {
+  const rawTypeCandidate = q.type || q.questionType || q.question_type || q.qType;
+  const rawTypeStr = rawTypeCandidate ? String(rawTypeCandidate).toLowerCase().trim() : '';
+
+  // Check upload variants across historical and contemporary representations
+  const isUploadType =
+    rawTypeStr === 'upload' ||
+    rawTypeStr === 'upload_paper' ||
+    rawTypeStr === 'uploadpaper' ||
+    rawTypeStr === 'paper' ||
+    rawTypeStr === 'file' ||
+    rawTypeStr === 'upload_file' ||
+    rawTypeStr === 'upload-file' ||
+    rawTypeStr === 'file_upload' ||
+    rawTypeStr === 'fileupload' ||
+    rawTypeStr === 'document' ||
+    rawTypeStr === 'attachment' ||
+    rawTypeStr === 'pdf';
+
+  // Check written variants
+  const isWrittenType =
+    rawTypeStr === 'written' ||
+    rawTypeStr === 'text' ||
+    rawTypeStr === 'descriptive' ||
+    rawTypeStr === 'subjective' ||
+    rawTypeStr === 'essay';
+
+  let qType;
+  if (isUploadType) {
     qType = 'upload';
-  } else if (qType === 'text' || qType === 'descriptive') {
+  } else if (isWrittenType) {
     qType = 'written';
-  } else if (qType !== 'written' && qType !== 'upload') {
+  } else if (!rawTypeCandidate) {
+    // If no explicit type was specified:
+    // If it has attachedFiles / fileUrl / paperFileUrl and NO options, safely classify as upload
+    const hasUploadIndicators =
+      (Array.isArray(q.attachedFiles) && q.attachedFiles.length > 0) ||
+      (Array.isArray(q.files) && q.files.length > 0) ||
+      (Array.isArray(q.attachments) && q.attachments.length > 0) ||
+      (Array.isArray(q.uploadedFiles) && q.uploadedFiles.length > 0) ||
+      !!(q.fileUrl || q.paperFileUrl || q.downloadUrl || q.paperFileName);
+    const hasOptions =
+      (Array.isArray(q.options) && q.options.length > 0) ||
+      (Array.isArray(q.choices) && q.choices.length > 0) ||
+      (Array.isArray(q.answers) && q.answers.length > 0);
+
+    if (hasUploadIndicators && !hasOptions) {
+      qType = 'upload';
+    } else {
+      qType = 'mcq';
+    }
+  } else {
     qType = 'mcq';
   }
 
@@ -115,27 +171,32 @@ export const normalizeQuestion = (q, fallbackId = 'q_1', fallbackIndex = 0) => {
   }
 
   // Attached files normalization (Images / PDFs uploaded by Admin)
-  const rawAttached = q.attachedFiles || q.files || q.attachments;
+  const rawAttached = q.attachedFiles || q.files || q.attachments || q.uploadedFiles || q.questionFiles;
   let attachedFiles = toArraySafe(rawAttached).map((fItem, fIdx) => {
     if (!fItem || typeof fItem !== 'object') return null;
+    const fUrl = fItem.url || fItem.downloadUrl || fItem.fileUrl || '';
+    const fName = fItem.name || fItem.fileName || fItem.paperFileName || 'Attached File';
+    const isImg = fItem.type === 'image' || (!fItem.type && fUrl.match(/\.(jpg|jpeg|png|webp)/i));
     return {
       id: fItem.id || `file_${fIdx + 1}`,
-      url: fItem.url || fItem.downloadUrl || '',
-      name: fItem.name || fItem.fileName || 'Attached File',
-      type: fItem.type || (fItem.url?.match(/\.(jpg|jpeg|png|webp)/i) ? 'image' : 'pdf'),
+      url: fUrl,
+      name: fName,
+      type: isImg ? 'image' : 'pdf',
       size: fItem.size || null,
       sizeFormatted: fItem.sizeFormatted || ''
     };
-  }).filter(Boolean);
+  }).filter((f) => f && f.url);
 
   // Fallback if legacy single file property was used
-  const singleUrl = q.fileUrl || q.imageUrl || q.paperFileUrl;
+  const singleUrl = q.fileUrl || q.imageUrl || q.paperFileUrl || q.url || q.downloadUrl || q.paperUrl;
   if (attachedFiles.length === 0 && singleUrl) {
+    const singleName = q.fileName || q.paperFileName || q.name || 'Attached Document';
+    const isImg = q.fileType === 'image' || (!q.fileType && (q.imageUrl || singleUrl.match(/\.(jpg|jpeg|png|webp)/i)));
     attachedFiles = [{
       id: 'file_0',
       url: singleUrl,
-      name: q.fileName || q.paperFileName || 'Attached Document',
-      type: q.fileType || (singleUrl.match(/\.(jpg|jpeg|png|webp)/i) ? 'image' : 'pdf'),
+      name: singleName,
+      type: isImg ? 'image' : 'pdf',
       size: q.size || null,
       sizeFormatted: q.sizeFormatted || ''
     }];
@@ -156,7 +217,7 @@ export const normalizeQuestion = (q, fallbackId = 'q_1', fallbackIndex = 0) => {
     allowMultipleChoices: !!q.allowMultipleChoices,
     enableExplanation: !!q.enableExplanation,
     explanation: q.explanation || q.answerGuidelines || q.description || '',
-    answerRequired: q.answerRequired !== false,
+    answerRequired: !!q.answerRequired,
     answerGuidelines: q.answerGuidelines || q.description || q.explanation || '',
     description: q.description || q.answerGuidelines || q.explanation || '',
     attachedFiles,
@@ -187,6 +248,9 @@ export const extractRawQuestionsFromContainer = (container) => {
     container.items ??
     container.questionListObj ??
     container.questionsMap ??
+    container.questionsList ??
+    container.question_list ??
+    container.uploadQuestions ??
     container.data;
 
   return toArraySafe(raw);

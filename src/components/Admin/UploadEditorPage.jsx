@@ -40,24 +40,59 @@ export default function UploadEditorPage({
 
   // Multiple File Uploads state (Images or PDFs)
   const [attachedFiles, setAttachedFiles] = useState(() => {
-    if (questionToEdit?.attachedFiles && Array.isArray(questionToEdit.attachedFiles)) {
-      return [...questionToEdit.attachedFiles];
+    const rawFiles =
+      questionToEdit?.attachedFiles ||
+      questionToEdit?.files ||
+      questionToEdit?.attachments ||
+      questionToEdit?.uploadedFiles ||
+      questionToEdit?.questionFiles;
+
+    if (Array.isArray(rawFiles) && rawFiles.length > 0) {
+      return rawFiles
+        .map((fItem, fIdx) => {
+          if (!fItem) return null;
+          const fUrl = fItem.url || fItem.downloadUrl || fItem.fileUrl || '';
+          const fName = fItem.name || fItem.fileName || fItem.paperFileName || 'Attached File';
+          const isImg = fItem.type === 'image' || (!fItem.type && fUrl.match(/\.(jpg|jpeg|png|webp)/i));
+          return {
+            id: fItem.id || `file_${fIdx}_${Math.random().toString(36).substring(2, 6)}`,
+            url: fUrl,
+            name: fName,
+            type: isImg ? 'image' : 'pdf',
+            size: fItem.size || null,
+            sizeFormatted: fItem.sizeFormatted || (fItem.size ? formatFileSize(fItem.size) : '')
+          };
+        })
+        .filter((f) => f && f.url);
     }
-    const singleUrl = questionToEdit?.fileUrl || questionToEdit?.imageUrl || questionToEdit?.paperFileUrl;
+
+    const singleUrl =
+      questionToEdit?.fileUrl ||
+      questionToEdit?.imageUrl ||
+      questionToEdit?.paperFileUrl ||
+      questionToEdit?.url ||
+      questionToEdit?.downloadUrl ||
+      questionToEdit?.paperUrl;
+
     if (singleUrl) {
+      const singleName = questionToEdit?.fileName || questionToEdit?.paperFileName || questionToEdit?.name || 'Attached Document';
+      const isImg = questionToEdit?.fileType === 'image' || (!questionToEdit?.fileType && (questionToEdit?.imageUrl || singleUrl.match(/\.(jpg|jpeg|png|webp)/i)));
       return [{
         id: 'file_0',
         url: singleUrl,
-        name: questionToEdit?.fileName || questionToEdit?.paperFileName || 'Attached File',
-        type: questionToEdit?.fileType || (questionToEdit?.imageUrl ? 'image' : 'pdf'),
-        sizeFormatted: questionToEdit?.fileSize ? formatFileSize(questionToEdit.fileSize) : ''
+        name: singleName,
+        type: isImg ? 'image' : 'pdf',
+        size: questionToEdit?.fileSize || questionToEdit?.size || null,
+        sizeFormatted: (questionToEdit?.fileSize || questionToEdit?.size) ? formatFileSize(questionToEdit?.fileSize || questionToEdit?.size) : ''
       }];
     }
+
     return [];
   });
 
   const [error, setError] = useState('');
   const [fileUploading, setFileUploading] = useState(false);
+  const [isDragging, setIsDragging] = useState(false);
   const fileInputRef = useRef(null);
 
   // Reset form state to add another question
@@ -67,18 +102,19 @@ export default function UploadEditorPage({
     setAnswerGuidelines('');
     setAttachedFiles([]);
     setError('');
+    setIsDragging(false);
   };
 
-  // Multiple File Upload Handler (Supports multiple files at once and preserves previously selected files)
-  const handleFileSelect = (e) => {
-    const files = e.target.files ? Array.from(e.target.files) : [];
-    if (files.length === 0) return;
+  // Helper to process multiple files (from input or drag-drop)
+  const processFiles = (files) => {
+    const fileList = files ? Array.from(files) : [];
+    if (fileList.length === 0) return;
     setError('');
 
     const newFilesToAdd = [];
     const validExtensions = ['.jpg', '.jpeg', '.png', '.webp', '.pdf'];
 
-    for (const file of files) {
+    for (const file of fileList) {
       const lowerName = file.name.toLowerCase();
       const isImage = file.type.startsWith('image/') || /\.(jpg|jpeg|png|webp)$/i.test(lowerName);
       const isPdf = file.type === 'application/pdf' || lowerName.endsWith('.pdf');
@@ -96,7 +132,14 @@ export default function UploadEditorPage({
         return;
       }
 
-      const previewUrl = isImage ? URL.createObjectURL(file) : '';
+      // Safe local preview URL for both images and PDFs
+      let previewUrl = '';
+      try {
+        previewUrl = URL.createObjectURL(file);
+      } catch (err) {
+        console.warn('Could not create ObjectURL:', err);
+      }
+
       newFilesToAdd.push({
         id: `file_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
         fileObj: file,
@@ -112,9 +155,46 @@ export default function UploadEditorPage({
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
+  // Multiple File Upload Handler (Supports multiple files at once and preserves previously selected files)
+  const handleFileSelect = (e) => {
+    processFiles(e.target.files);
+  };
+
+  // Drag and drop handlers
+  const handleDragOver = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!isDragging) setIsDragging(true);
+  };
+
+  const handleDragLeave = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(false);
+  };
+
+  const handleDrop = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(false);
+    if (e.dataTransfer && e.dataTransfer.files) {
+      processFiles(e.dataTransfer.files);
+    }
+  };
+
   // Remove individual file
   const handleRemoveFile = (fileId) => {
-    setAttachedFiles((prev) => prev.filter((f) => f.id !== fileId));
+    setAttachedFiles((prev) => {
+      const removed = prev.find((f) => f.id === fileId);
+      if (removed?.fileObj && removed.url && removed.url.startsWith('blob:')) {
+        try {
+          URL.revokeObjectURL(removed.url);
+        } catch {
+          // Ignore
+        }
+      }
+      return prev.filter((f) => f.id !== fileId);
+    });
   };
 
   // Reorder files (Move Up)
@@ -162,9 +242,10 @@ export default function UploadEditorPage({
 
     // Check Part/Section Marks Validation limits
     const enteredMarks = marks ? parseFloat(marks) : 0;
+    const isSecMode = formData?.partMode === 'sections' || !!sectionName;
     const targetPartTotal = part?.partTotalMarks
       ? Number(part.partTotalMarks)
-      : (formData?.parts?.length === 1 ? Number(formData.totalMarks) || 0 : 0);
+      : (!isSecMode && formData?.parts?.length === 1 ? Number(formData.totalMarks) || 0 : 0);
 
     if (targetPartTotal > 0 && enteredMarks > 0) {
       const existingQuestions = part?.questions || [];
@@ -188,14 +269,20 @@ export default function UploadEditorPage({
     setFileUploading(true);
 
     try {
+      const effectiveActivityId = activityId || formData?.activityId || formData?.id || `act_${Date.now()}`;
+
       // Upload any pending file objects to Firebase Storage
       const uploadedAttachedFiles = await Promise.all(
         attachedFiles.map(async (fItem) => {
           if (fItem.fileObj) {
-            const uploadedUrl = await uploadActivityFile(activityId, fItem.fileObj);
+            let uploadedUrl = await uploadActivityFile(effectiveActivityId, fItem.fileObj);
+            // If storage upload returned null or preview, fall back to existing preview url
+            if (!uploadedUrl && fItem.url) {
+              uploadedUrl = fItem.url;
+            }
             return {
               id: fItem.id,
-              url: uploadedUrl,
+              url: uploadedUrl || '',
               name: fItem.name,
               type: fItem.type,
               size: fItem.size || null,
@@ -220,6 +307,7 @@ export default function UploadEditorPage({
         type: 'upload',
         questionText: questionText ? questionText.trim() : (firstFile?.name ? `Question Document: ${firstFile.name}` : 'Uploaded Question File'),
         marks: marks ? parseFloat(marks) : null,
+        answerRequired: questionToEdit?.answerRequired !== undefined ? questionToEdit.answerRequired : false,
         answerGuidelines: answerGuidelines.trim(),
         description: answerGuidelines.trim(),
         attachedFiles: uploadedAttachedFiles,
@@ -486,19 +574,25 @@ export default function UploadEditorPage({
               </div>
             ) : (
               <div
-                className="empty-upload-dropzone mt-5 pt-8 pb-8 text-center cursor-pointer border-dashed rounded"
+                className={`empty-upload-dropzone mt-5 pt-8 pb-8 text-center cursor-pointer border-dashed rounded ${isDragging ? 'dropzone-active' : ''}`}
                 onClick={() => fileInputRef.current?.click()}
+                onDragOver={handleDragOver}
+                onDragLeave={handleDragLeave}
+                onDrop={handleDrop}
+                style={isDragging ? { borderColor: '#4f46e5', backgroundColor: '#eef2ff' } : {}}
               >
                 <div className="empty-upload-icon-box mb-3">
-                  <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                  <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke={isDragging ? '#4f46e5' : '#94a3b8'} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
                     <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
                     <polyline points="17 8 12 3 7 8" />
                     <line x1="12" y1="3" x2="12" y2="15" />
                   </svg>
                 </div>
-                <h4 className="text-base font-bold text-dark m-0">No files uploaded yet</h4>
+                <h4 className="text-base font-bold text-dark m-0">
+                  {isDragging ? 'Drop files here to upload' : 'No files uploaded yet'}
+                </h4>
                 <p className="text-xs text-muted mt-2 mb-0">
-                  Click <strong>+ Upload</strong> above to select one or more files from your device.
+                  Drag and drop files here, or click <strong>+ Upload</strong> to select from your device.
                 </p>
               </div>
             )}
