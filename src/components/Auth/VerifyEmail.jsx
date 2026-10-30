@@ -139,7 +139,7 @@ export default function VerifyEmail({ user, onVerified }) {
     <div className="auth-card">
       <div className="auth-header">
         <div className="brand-badge logo-only">
-          <img src={logoImg} alt="Logo" className="brand-logo-img" />
+          <img src={logoImg} alt="Task Grade" className="brand-logo-img" />
         </div>
 
         <div className="verify-email-icon-box">

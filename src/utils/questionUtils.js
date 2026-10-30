@@ -1,5 +1,5 @@
 /**
- * Quizora Unified Question Normalization Utility
+ * Task Grade Unified Question Normalization Utility
  * 
  * Provides consistent, single-source-of-truth normalization for activity question hierarchies:
  * - Single Part

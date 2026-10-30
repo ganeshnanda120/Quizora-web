@@ -2,18 +2,33 @@ import { initializeApp } from "firebase/app";
 import { getAuth } from "firebase/auth";
 import { getFirestore } from "firebase/firestore";
 import { getStorage } from "firebase/storage";
+import { getAnalytics, isSupported } from "firebase/analytics";
 
+// Your web app's Firebase configuration
 const firebaseConfig = {
-  apiKey: "AIzaSyC9-wJQyt61OtKvoCfu12A0AjeKcz75C-U",
-  authDomain: "quizora-8276d.firebaseapp.com",
-  projectId: "quizora-8276d",
-  storageBucket: "quizora-8276d.firebasestorage.app",
-  messagingSenderId: "108042259042",
-  appId: "1:108042259042:web:c786b88758be3b26485f3b"
+  apiKey: "AIzaSyB8PM-cwD2YzMReD2uKYCXN0yT-U9Gm_IY",
+  authDomain: "quizora-d44bc.firebaseapp.com",
+  projectId: "quizora-d44bc",
+  storageBucket: "quizora-d44bc.firebasestorage.app",
+  messagingSenderId: "1084948977604",
+  appId: "1:1084948977604:web:d88c4a31d4d02162893691",
+  measurementId: "G-LL0ELWXTLL"
 };
 
+// Initialize Firebase
 const app = initializeApp(firebaseConfig);
 export const auth = getAuth(app);
 export const db = getFirestore(app);
 export const storage = getStorage(app);
-
+
+// Initialize Analytics conditionally if supported
+export let analytics = null;
+if (typeof window !== "undefined") {
+  isSupported().then((supported) => {
+    if (supported) {
+      analytics = getAnalytics(app);
+    }
+  });
+}
+
+export default app;

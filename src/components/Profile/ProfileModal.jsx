@@ -8,12 +8,19 @@ const GENDER_OPTIONS = [
   'Prefer not to say'
 ];
 
-export default function ProfileModal({ user, profileData, initialMode = 'view', onClose, onProfileUpdated, onLogout }) {
-  const [mode, setMode] = useState(initialMode); // 'view' or 'edit'
+export default function ProfileModal({ user, profileData, initialMode = 'view', onClose, onProfileUpdated, onLogout, onModeChange }) {
+  const [internalMode, setInternalMode] = useState(null);
+  const mode = internalMode || initialMode;
+
+  const switchMode = (newMode) => {
+    setInternalMode(newMode);
+    if (onModeChange) onModeChange(newMode);
+  };
 
   const [fullName, setFullName] = useState(profileData?.fullName || user?.displayName || '');
   const [gender, setGender] = useState(profileData?.gender || 'Male');
   const [dateOfBirth, setDateOfBirth] = useState(profileData?.dateOfBirth || '');
+  const [role, setRole] = useState(profileData?.role ? (profileData.role.charAt(0).toUpperCase() + profileData.role.slice(1)) : 'Admin');
   
   const [selectedFile, setSelectedFile] = useState(null);
 
@@ -92,6 +99,9 @@ export default function ProfileModal({ user, profileData, initialMode = 'view', 
         fullName: cleanName,
         gender,
         dateOfBirth,
+        role: role.toLowerCase(),
+        isAdmin: role.toLowerCase() !== 'student',
+        isStudent: role.toLowerCase() === 'student',
         photoURL: initialPhoto,
         profileCompleted: true,
         createdAt: profileData?.createdAt || now,
@@ -113,7 +123,7 @@ export default function ProfileModal({ user, profileData, initialMode = 'view', 
 
       setPreviewUrl(savedData.photoURL || user?.photoURL || '');
       setSelectedFile(null);
-      setMode('view');
+      switchMode('view');
       setLoading(false);
 
     } catch (err) {
@@ -188,7 +198,7 @@ export default function ProfileModal({ user, profileData, initialMode = 'view', 
                   {getInitials(fullName)}
                 </div>
               )}
-              <h3 className="profile-view-name">{fullName || 'Quizora User'}</h3>
+              <h3 className="profile-view-name">{fullName || 'Task Grade User'}</h3>
               <span className="profile-view-email">{user?.email}</span>
             </div>
 
@@ -212,12 +222,19 @@ export default function ProfileModal({ user, profileData, initialMode = 'view', 
                 <span className="info-label">Date of Birth</span>
                 <span className="info-value">{dateOfBirth || 'Not provided'}</span>
               </div>
+
+              <div className="info-item">
+                <span className="info-label">Account Role</span>
+                <span className="info-value" style={{ textTransform: 'capitalize' }}>
+                  {profileData?.role || 'Admin'}
+                </span>
+              </div>
             </div>
 
             <div className="modal-actions">
               <button
                 className="btn btn-primary"
-                onClick={() => setMode('edit')}
+                onClick={() => switchMode('edit')}
               >
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="16" height="16">
                   <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
@@ -353,6 +370,21 @@ export default function ProfileModal({ user, profileData, initialMode = 'view', 
               />
             </div>
 
+            <div className="form-group">
+              <label className="form-label" htmlFor="edit-role">Account Role</label>
+              <select
+                id="edit-role"
+                className="form-input select-input"
+                value={role}
+                onChange={(e) => setRole(e.target.value)}
+              >
+                <option value="Admin">Admin</option>
+                <option value="Faculty">Faculty</option>
+                <option value="Sub-Admin">Sub-Admin</option>
+                <option value="Student">Student</option>
+              </select>
+            </div>
+
             <div className="modal-actions">
               <button
                 type="submit"
@@ -371,7 +403,7 @@ export default function ProfileModal({ user, profileData, initialMode = 'view', 
               <button
                 type="button"
                 className="btn btn-secondary"
-                onClick={() => setMode('view')}
+                onClick={() => switchMode('view')}
                 disabled={loading}
               >
                 Cancel

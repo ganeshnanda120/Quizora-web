@@ -677,7 +677,7 @@ export default function Step2BasicInfo({
               type="text"
               id="institutionName"
               className="form-input"
-              placeholder="e.g. Stanford University or Quizora Academy"
+              placeholder="e.g. Stanford University or Task Grade Academy"
               value={formData.institutionName || ''}
               onChange={(e) => handleInputChange('institutionName', e.target.value)}
             />

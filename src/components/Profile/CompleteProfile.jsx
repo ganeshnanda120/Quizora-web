@@ -133,7 +133,7 @@ export default function CompleteProfile({ user, initialProfile, onComplete }) {
     <div className="auth-card profile-setup-card">
       <div className="auth-header">
         <div className="brand-badge logo-only">
-          <img src={logoImg} alt="Logo" className="brand-logo-img" />
+          <img src={logoImg} alt="Task Grade" className="brand-logo-img" />
         </div>
         <h1 className="auth-title">Complete Your Profile</h1>
         <p className="auth-subtitle">

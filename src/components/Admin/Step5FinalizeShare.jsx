@@ -19,8 +19,8 @@ export default function Step5FinalizeShare({ activityId, shareUrl, activityData,
   const handleShare = async () => {
     setShareNotice('');
     const sharePayload = {
-      title: activityData?.title || 'Quizora Activity',
-      text: `Join "${activityData?.title || 'Quizora Activity'}" on Quizora:`,
+      title: activityData?.title || 'Task Grade Activity',
+      text: `Join "${activityData?.title || 'Task Grade Activity'}" on Task Grade:`,
       url: finalUrl
     };
 

@@ -1,32 +1,62 @@
-import { useState, useEffect } from 'react';
-import { onAuthStateChanged, getRedirectResult } from 'firebase/auth';
+import { useState, useEffect, useCallback } from 'react';
+import { onAuthStateChanged, getRedirectResult, signOut } from 'firebase/auth';
 import { auth } from './firebase';
-import { getUserProfile, checkIsProfileComplete } from './services/userService';
+import { getUserProfile, checkIsProfileComplete, subscribeUserProfile } from './services/userService';
+import { canAccessRoute } from './services/permissionService';
+import { RouterProvider, useRouter, matchRoute } from './router';
 import Login from './components/Auth/Login';
 import Register from './components/Auth/Register';
 import VerifyEmail from './components/Auth/VerifyEmail';
 import CompleteProfile from './components/Profile/CompleteProfile';
 import Dashboard from './pages/Dashboard';
 import StudentActivityScreen from './components/Student/StudentActivityScreen';
+import AccessDenied from './pages/AccessDenied';
+import NotFound from './pages/NotFound';
 import logoImg from './assets/logo.png';
 import './App.css';
 
-function App() {
+/**
+ * Checks whether user email is verified or authenticated via Google provider
+ */
+const isUserVerified = (u) => {
+  if (!u) return false;
+  if (u.emailVerified) return true;
+  const isGoogleUser = u.providerData?.some(
+    (provider) => provider.providerId === 'google.com'
+  );
+  return Boolean(isGoogleUser);
+};
+
+/**
+ * Checks whether user profile is filled
+ */
+const isProfileComplete = (profile) => {
+  return checkIsProfileComplete(profile);
+};
+
+/**
+ * Checks if the route belongs to the core dashboard / admin suite
+ */
+const isKnownDashboardRoute = (path) => {
+  if (['/dashboard', '/profile', '/profile/edit', '/admin', '/admin/create', '/admin/submissions', '/admin/results'].includes(path)) {
+    return true;
+  }
+  if (matchRoute('/admin/submissions/:activityId', path)) {
+    return true;
+  }
+  if (matchRoute('/admin/results/:activityId', path)) {
+    return true;
+  }
+  return false;
+};
+
+function AppContent() {
+  const { currentPath, navigate } = useRouter();
+
   const [user, setUser] = useState(null);
   const [profileData, setProfileData] = useState(null);
   const [authLoading, setAuthLoading] = useState(true);
   const [profileLoading, setProfileLoading] = useState(false);
-  const [currentPath, setCurrentPath] = useState(window.location.pathname);
-
-  // Sync state with browser location
-  useEffect(() => {
-    const handlePopState = () => {
-      setCurrentPath(window.location.pathname);
-    };
-
-    window.addEventListener('popstate', handlePopState);
-    return () => window.removeEventListener('popstate', handlePopState);
-  }, []);
 
   // Catch redirect auth result on load
   useEffect(() => {
@@ -35,19 +65,8 @@ function App() {
     });
   }, []);
 
-  const navigateTo = (path) => {
-    let target = path;
-    if (!target.startsWith('/')) {
-      target = '/' + target;
-    }
-    if (window.location.pathname !== target) {
-      window.history.pushState({}, '', target);
-    }
-    setCurrentPath(target);
-  };
-
   // Helper to fetch user profile from Firestore with safety checks
-  const fetchProfile = async (uid) => {
+  const fetchProfile = useCallback(async (uid) => {
     try {
       const res = await getUserProfile(uid);
       setProfileData(res.data);
@@ -57,13 +76,14 @@ function App() {
       setProfileData(null);
       return null;
     }
-  };
+  }, []);
 
-  // Firebase auth state listener - safely batches auth and profile checking
+  // Firebase auth state listener with real-time profile subscription
   useEffect(() => {
     let isMounted = true;
+    let unsubscribeProfile = () => {};
 
-    const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
+    const unsubscribeAuth = onAuthStateChanged(auth, async (currentUser) => {
       if (!isMounted) return;
 
       if (currentUser) {
@@ -80,7 +100,16 @@ function App() {
             setAuthLoading(false);
           }
         }
+
+        // Attach real-time snapshot listener for permission & profile changes
+        unsubscribeProfile();
+        unsubscribeProfile = subscribeUserProfile(currentUser.uid, (updatedProfile) => {
+          if (isMounted) {
+            setProfileData(updatedProfile);
+          }
+        });
       } else {
+        unsubscribeProfile();
         setUser(null);
         setProfileData(null);
         setProfileLoading(false);
@@ -90,103 +119,95 @@ function App() {
 
     return () => {
       isMounted = false;
-      unsubscribe();
+      unsubscribeAuth();
+      unsubscribeProfile();
     };
-  }, []);
+  }, [fetchProfile]);
 
-  // Helper to determine if user is verified
-  // Google sign-in users are automatically considered verified.
-  const isUserVerified = (u) => {
-    if (!u) return false;
-    if (u.emailVerified) return true;
-
-    // Check if user authenticated via Google Provider
-    const isGoogleUser = u.providerData?.some(
-      (provider) => provider.providerId === 'google.com'
-    );
-    return isGoogleUser;
-  };
-
-  // Helper to check if the user profile is completed
-  const isProfileComplete = (profile) => {
-    return checkIsProfileComplete(profile);
-  };
-
-  // Handle automatic redirects based on auth state, email verification & profile completion
+  // Handle automatic redirects based on auth state, verification, and saved return routes
   useEffect(() => {
-    // Hold routing until both auth state and profile data have finished loading
     if (authLoading || profileLoading) return;
 
-    // Do NOT redirect if accessing a direct activity URL
-    if (currentPath.startsWith('/activity/')) {
+    if (!user) {
+      // If user is unauthenticated and attempting to visit a private route, redirect to /login
+      if (currentPath !== '/login' && currentPath !== '/register' && !currentPath.startsWith('/activity/')) {
+        if (currentPath !== '/') {
+          sessionStorage.setItem('quizora_redirect_after_auth', currentPath);
+        }
+        navigate('/login', { replace: true });
+      }
       return;
     }
 
-    let target = null;
-    if (user) {
-      if (isUserVerified(user)) {
-        if (!isProfileComplete(profileData)) {
-          if (currentPath !== '/complete-profile') target = '/complete-profile';
-        } else {
-          if (['/login', '/register', '/verify-email', '/complete-profile', '/'].includes(currentPath)) {
-            const redirectTarget = sessionStorage.getItem('quizora_redirect_after_auth');
-            if (redirectTarget) {
-              sessionStorage.removeItem('quizora_redirect_after_auth');
-              target = redirectTarget;
-            } else {
-              target = '/dashboard';
-            }
-          }
-        }
-      } else {
-        if (currentPath !== '/verify-email') target = '/verify-email';
+    // Authenticated user checks
+    if (!isUserVerified(user)) {
+      if (currentPath !== '/verify-email') {
+        navigate('/verify-email', { replace: true });
       }
-    } else {
-      if (['/dashboard', '/complete-profile', '/verify-email', '/'].includes(currentPath)) {
-        target = '/login';
-      }
+      return;
     }
 
-    if (target) {
-      window.history.pushState({}, '', target);
-      queueMicrotask(() => setCurrentPath(target));
+    if (!isProfileComplete(profileData)) {
+      if (currentPath !== '/complete-profile') {
+        navigate('/complete-profile', { replace: true });
+      }
+      return;
     }
-  }, [user, profileData, authLoading, profileLoading, currentPath]);
+
+    // User is fully authenticated, verified, and profile complete.
+    // Redirect away from entry/auth pages to intended destination or /dashboard
+    if (['/login', '/register', '/verify-email', '/complete-profile', '/'].includes(currentPath)) {
+      const redirectTarget = sessionStorage.getItem('quizora_redirect_after_auth');
+      if (redirectTarget && redirectTarget !== '/login' && redirectTarget !== '/') {
+        sessionStorage.removeItem('quizora_redirect_after_auth');
+        navigate(redirectTarget, { replace: true });
+      } else {
+        navigate('/dashboard', { replace: true });
+      }
+    }
+  }, [user, profileData, authLoading, profileLoading, currentPath, navigate]);
+
+  const handleLogout = useCallback(async () => {
+    try {
+      await signOut(auth);
+      navigate('/login');
+    } catch (error) {
+      console.error("Error signing out:", error);
+    }
+  }, [navigate]);
 
   // Callback when user completes email verification
-  const handleUserVerified = async (updatedUser) => {
+  const handleUserVerified = useCallback((updatedUser) => {
     setUser(updatedUser);
     setProfileLoading(true);
-    try {
-      await fetchProfile(updatedUser.uid);
-    } finally {
+    fetchProfile(updatedUser.uid).finally(() => {
       setProfileLoading(false);
-    }
-  };
+    });
+  }, [fetchProfile]);
 
   // Callback when user completes profile setup
-  const handleProfileCompleted = (newProfileData) => {
+  const handleProfileCompleted = useCallback((newProfileData) => {
     setProfileData(newProfileData);
     const redirectTarget = sessionStorage.getItem('quizora_redirect_after_auth');
-    if (redirectTarget) {
+    if (redirectTarget && redirectTarget !== '/login' && redirectTarget !== '/') {
       sessionStorage.removeItem('quizora_redirect_after_auth');
-      navigateTo(redirectTarget);
+      navigate(redirectTarget);
     } else {
-      navigateTo('/dashboard');
+      navigate('/dashboard');
     }
-  };
+  }, [navigate]);
 
   // Callback when user updates profile from dashboard modal
-  const handleProfileUpdated = (updatedProfileData) => {
+  const handleProfileUpdated = useCallback((updatedProfileData) => {
     setProfileData(updatedProfileData);
-  };
+  }, []);
 
-  // Render initial loading screen while Firebase checks session & profile
-  if (authLoading || profileLoading) {
+  // 1. Initial loading screen while Firebase checks session & profile
+  if (authLoading || (user && profileLoading)) {
     return (
       <div className="full-page-loader">
         <div className="loader-brand">
-          <img src={logoImg} alt="Logo" className="loader-logo" />
+          <img src={logoImg} alt="Task Grade" className="loader-logo" />
         </div>
         <div className="spinner large"></div>
         <p>Loading application...</p>
@@ -194,7 +215,7 @@ function App() {
     );
   }
 
-  // DIRECT ACTIVITY LINK VIEW CONTROLLER (ACCESSED VIA SHARE LINK)
+  // 2. Direct Activity Link view controller (Student / Guest taking an activity)
   if (currentPath.startsWith('/activity/')) {
     const activityId = currentPath.replace('/activity/', '').split('?')[0].split('/')[0];
     return (
@@ -202,12 +223,12 @@ function App() {
         activityId={activityId}
         user={user}
         profileData={profileData}
-        onNavigateHome={() => navigateTo(user ? '/dashboard' : '/login')}
+        onNavigateHome={() => navigate(user ? '/dashboard' : '/login')}
       />
     );
   }
 
-  // Active Session View Controller
+  // 3. Authenticated View Controller
   if (user) {
     if (!isUserVerified(user)) {
       return (
@@ -218,7 +239,7 @@ function App() {
             <VerifyEmail user={user} onVerified={handleUserVerified} />
           </main>
           <footer className="app-footer">
-            <p>© {new Date().getFullYear()} Quizora Web Application. Powered by Firebase Auth.</p>
+            <p>© {new Date().getFullYear()} Task Grade Web Application. Powered by Firebase Auth.</p>
           </footer>
         </div>
       );
@@ -237,41 +258,91 @@ function App() {
             />
           </main>
           <footer className="app-footer">
-            <p>© {new Date().getFullYear()} Quizora Web Application. Powered by Firebase Auth.</p>
+            <p>© {new Date().getFullYear()} Task Grade Web Application. Powered by Firebase Auth.</p>
           </footer>
         </div>
       );
     }
 
+    // Role and Permission verification
+    const accessCheck = canAccessRoute(currentPath, profileData, user);
+    if (!accessCheck.allowed) {
+      return (
+        <AccessDenied
+          user={user}
+          profileData={profileData}
+          requiredRole={accessCheck.requiredRole}
+          requiredPermission={accessCheck.requiredPermission}
+          reason={accessCheck.reason}
+          onLogout={handleLogout}
+        />
+      );
+    }
+
+    // Known Dashboard / Admin / Profile routes
+    if (isKnownDashboardRoute(currentPath)) {
+      return (
+        <Dashboard
+          user={user}
+          profileData={profileData}
+          onProfileUpdated={handleProfileUpdated}
+        />
+      );
+    }
+
+    // Fallback while redirecting from auth paths to /dashboard
+    if (['/login', '/register', '/verify-email', '/complete-profile', '/'].includes(currentPath)) {
+      return (
+        <Dashboard
+          user={user}
+          profileData={profileData}
+          onProfileUpdated={handleProfileUpdated}
+        />
+      );
+    }
+
+    // Unknown authenticated route -> 404
+    return <NotFound user={user} />;
+  }
+
+  // 4. Unauthenticated View Controller
+  if (currentPath === '/register') {
     return (
-      <Dashboard
-        user={user}
-        profileData={profileData}
-        onProfileUpdated={handleProfileUpdated}
-      />
+      <div className="app-viewport">
+        <div className="bg-glow bg-glow-1"></div>
+        <div className="bg-glow bg-glow-2"></div>
+
+        <main className="auth-container">
+          <Register onNavigate={(target) => navigate(target.startsWith('/') ? target : `/${target}`)} />
+        </main>
+
+        <footer className="app-footer">
+          <p>© {new Date().getFullYear()} Task Grade Web Application. Powered by Firebase Auth.</p>
+        </footer>
+      </div>
     );
   }
 
-  // Unauthenticated View Controller
   return (
     <div className="app-viewport">
       <div className="bg-glow bg-glow-1"></div>
       <div className="bg-glow bg-glow-2"></div>
 
       <main className="auth-container">
-        {currentPath === '/register' ? (
-          <Register onNavigate={(target) => navigateTo(target)} />
-        ) : (
-          <Login onNavigate={(target) => navigateTo(target)} />
-        )}
+        <Login onNavigate={(target) => navigate(target.startsWith('/') ? target : `/${target}`)} />
       </main>
 
       <footer className="app-footer">
-        <p>© {new Date().getFullYear()} Quizora Web Application. Powered by Firebase Auth.</p>
+        <p>© {new Date().getFullYear()} Task Grade Web Application. Powered by Firebase Auth.</p>
       </footer>
     </div>
   );
 }
 
-export default App;
-
+export default function App() {
+  return (
+    <RouterProvider>
+      <AppContent />
+    </RouterProvider>
+  );
+}

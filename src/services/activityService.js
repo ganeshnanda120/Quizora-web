@@ -213,7 +213,7 @@ export const saveActivityDraft = async (activityId, activityData) => {
   try {
     const docRef = doc(db, 'activities', activityId);
     await setDoc(docRef, payload, { merge: true });
-    console.log(`[Quizora] Activity draft successfully persisted to Firestore: ${activityId}`);
+    console.log(`[Task Grade] Activity draft successfully persisted to Firestore: ${activityId}`);
   } catch (err) {
     console.warn("Firestore activity draft write notice:", err.message);
     if (err.message && err.message.includes('exceeds the maximum allowed size')) {
@@ -226,7 +226,7 @@ export const saveActivityDraft = async (activityId, activityData) => {
         });
         const docRef = doc(db, 'activities', activityId);
         await setDoc(docRef, slimmedPayload, { merge: true });
-        console.log(`[Quizora] Activity draft persisted with slimmed payload: ${activityId}`);
+        console.log(`[Task Grade] Activity draft persisted with slimmed payload: ${activityId}`);
       } catch (retryErr) {
         console.warn("Firestore draft retry write notice:", retryErr.message);
       }
@@ -267,7 +267,7 @@ export const publishActivity = async (activityId, fullPayload) => {
   try {
     const docRef = doc(db, 'activities', activityId);
     await setDoc(docRef, finalPayload, { merge: true });
-    console.log(`[Quizora] Activity successfully published to Firestore: ${activityId}`);
+    console.log(`[Task Grade] Activity successfully published to Firestore: ${activityId}`);
   } catch (err) {
     console.warn("Firestore activity publish write notice:", err.message);
     if (err.message && err.message.includes('exceeds the maximum allowed size')) {
@@ -280,7 +280,7 @@ export const publishActivity = async (activityId, fullPayload) => {
         });
         const docRef = doc(db, 'activities', activityId);
         await setDoc(docRef, slimmedPayload, { merge: true });
-        console.log(`[Quizora] Activity successfully published with slimmed payload to Firestore: ${activityId}`);
+        console.log(`[Task Grade] Activity successfully published with slimmed payload to Firestore: ${activityId}`);
       } catch (retryErr) {
         console.error("Firestore publish retry failed:", retryErr.message);
         throw new Error("Activity contains documents that are too large for Firestore. Please upload smaller PDFs/images under 1MB.", { cause: retryErr });

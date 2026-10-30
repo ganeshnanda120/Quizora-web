@@ -1,6 +1,6 @@
-# Quizora Web Application 🚀
+# Task Grade — Create. Submit. Evaluate. 🚀
 
-**Quizora** is a modern, responsive, full-stack online examination, assignment, and activity management platform built with **React**, **Vite**, and **Firebase**. It provides intuitive workflows for educators/admins to create multi-part activities, design rich MCQ and written questions, collect participant data, grade submissions, and share permanent activity links across all screen sizes.
+**Task Grade** is a modern, responsive, full-stack assessment platform for exams, assignments, and activities built with **React**, **Vite**, and **Firebase**. It provides intuitive workflows for educators/admins to create multi-part activities, design rich MCQ and written questions, collect participant data, grade submissions, and share permanent activity links across all screen sizes.
 
 ---
 

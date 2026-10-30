@@ -660,10 +660,10 @@ export default function StudentAttendancePaper({
         <div className="student-appbar-inner flex-between align-center">
           {/* Left: Brand Logo & Title */}
           <div className="student-appbar-left flex-align-center gap-3">
-            <img src={logoImg} alt="Quizora" className="student-appbar-logo" />
+            <img src={logoImg} alt="Task Grade" className="student-appbar-logo" />
             <div className="student-appbar-title-box">
               <h1 className="student-appbar-title truncate font-bold text-dark m-0">
-                {activity?.title || 'Quizora Activity'}
+                {activity?.title || 'Task Grade Activity'}
               </h1>
               {activity?.subject && (
                 <span className="text-xs text-muted block truncate font-medium">{activity.subject}</span>

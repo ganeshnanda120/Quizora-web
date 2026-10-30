@@ -1,8 +1,18 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { getAdminActivities, getAdminSubmissions, duplicateAdminActivity, deleteAdminActivity } from '../../services/adminService';
 import SubmissionsList from './SubmissionsList';
 
-export default function AdminHome({ user, onSelectOption, onOpenCreate, onOpenShareLink }) {
+export default function AdminHome({
+  user,
+  onSelectOption,
+  onOpenCreate,
+  onOpenShareLink,
+  onOpenSubmissions,
+  onOpenResults,
+  onCloseModal,
+  initialSubmissionsActivityId,
+  initialResultsActivityId
+}) {
   const [activities, setActivities] = useState([]);
   const [submissions, setSubmissions] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -14,10 +24,38 @@ export default function AdminHome({ user, onSelectOption, onOpenCreate, onOpenSh
   // Interactive feedback & modal states
   const [copiedId, setCopiedId] = useState(null);
   const [actionNotice, setActionNotice] = useState(null);
-  const [selectedSubmissionsActivity, setSelectedSubmissionsActivity] = useState(null);
-  const [selectedResultsActivity, setSelectedResultsActivity] = useState(null);
+  const [manualSubmissionsActivity, setManualSubmissionsActivity] = useState(null);
+  const [manualResultsActivity, setManualResultsActivity] = useState(null);
   const [deleteTargetActivity, setDeleteTargetActivity] = useState(null);
   const [deletingActivity, setDeletingActivity] = useState(false);
+
+  const selectedSubmissionsActivity = useMemo(() => {
+    if (manualSubmissionsActivity) return manualSubmissionsActivity;
+    if (!initialSubmissionsActivityId) return null;
+    return activities.find((a) => a.activityId === initialSubmissionsActivityId) || {
+      activityId: initialSubmissionsActivityId,
+      title: 'Activity'
+    };
+  }, [manualSubmissionsActivity, initialSubmissionsActivityId, activities]);
+
+  const selectedResultsActivity = useMemo(() => {
+    if (manualResultsActivity) return manualResultsActivity;
+    if (!initialResultsActivityId) return null;
+    return activities.find((a) => a.activityId === initialResultsActivityId) || {
+      activityId: initialResultsActivityId,
+      title: 'Activity'
+    };
+  }, [manualResultsActivity, initialResultsActivityId, activities]);
+
+  const handleCloseSubmissions = () => {
+    setManualSubmissionsActivity(null);
+    if (onCloseModal) onCloseModal();
+  };
+
+  const handleCloseResults = () => {
+    setManualResultsActivity(null);
+    if (onCloseModal) onCloseModal();
+  };
 
   // Load activities and submissions for current logged-in admin only
   const loadData = useCallback(async () => {
@@ -439,7 +477,13 @@ export default function AdminHome({ user, onSelectOption, onOpenCreate, onOpenSh
                     <button
                       type="button"
                       className="btn btn-card-action btn-submissions"
-                      onClick={() => setSelectedSubmissionsActivity(act)}
+                      onClick={() => {
+                        if (onOpenSubmissions) {
+                          onOpenSubmissions(act);
+                        } else {
+                          setManualSubmissionsActivity(act);
+                        }
+                      }}
                       title="View student submissions & grade answers"
                     >
                       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -560,7 +604,13 @@ export default function AdminHome({ user, onSelectOption, onOpenCreate, onOpenSh
                     <button
                       type="button"
                       className="btn btn-card-action btn-results"
-                      onClick={() => setSelectedResultsActivity(act)}
+                      onClick={() => {
+                        if (onOpenResults) {
+                          onOpenResults(act);
+                        } else {
+                          setManualResultsActivity(act);
+                        }
+                      }}
                     >
                       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                         <line x1="18" y1="20" x2="18" y2="10" />
@@ -573,7 +623,13 @@ export default function AdminHome({ user, onSelectOption, onOpenCreate, onOpenSh
                     <button
                       type="button"
                       className="btn btn-card-action btn-submissions"
-                      onClick={() => setSelectedSubmissionsActivity(act)}
+                      onClick={() => {
+                        if (onOpenSubmissions) {
+                          onOpenSubmissions(act);
+                        } else {
+                          setManualSubmissionsActivity(act);
+                        }
+                      }}
                     >
                       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                         <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
@@ -661,7 +717,7 @@ export default function AdminHome({ user, onSelectOption, onOpenCreate, onOpenSh
 
       {/* VIEW SUBMISSIONS MODAL */}
       {selectedSubmissionsActivity && (
-        <div className="modal-backdrop" onClick={() => setSelectedSubmissionsActivity(null)}>
+        <div className="modal-backdrop" onClick={handleCloseSubmissions}>
           <div className="modal-card extra-wide-modal" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header-bar flex-between">
               <div>
@@ -672,7 +728,7 @@ export default function AdminHome({ user, onSelectOption, onOpenCreate, onOpenSh
               </div>
               <button
                 className="modal-close-btn"
-                onClick={() => setSelectedSubmissionsActivity(null)}
+                onClick={handleCloseSubmissions}
               >
                 ×
               </button>
@@ -680,7 +736,8 @@ export default function AdminHome({ user, onSelectOption, onOpenCreate, onOpenSh
             <div className="modal-body-scroll">
               <SubmissionsList
                 user={user}
-                onBack={() => setSelectedSubmissionsActivity(null)}
+                filterActivityId={selectedSubmissionsActivity.activityId}
+                onBack={handleCloseSubmissions}
               />
             </div>
           </div>
@@ -689,7 +746,7 @@ export default function AdminHome({ user, onSelectOption, onOpenCreate, onOpenSh
 
       {/* OPEN RESULTS MODAL */}
       {selectedResultsActivity && (
-        <div className="modal-backdrop" onClick={() => setSelectedResultsActivity(null)}>
+        <div className="modal-backdrop" onClick={handleCloseResults}>
           <div className="modal-card" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header-bar flex-between">
               <div>
@@ -702,7 +759,7 @@ export default function AdminHome({ user, onSelectOption, onOpenCreate, onOpenSh
               </div>
               <button
                 className="modal-close-btn"
-                onClick={() => setSelectedResultsActivity(null)}
+                onClick={handleCloseResults}
               >
                 ×
               </button>
@@ -773,7 +830,7 @@ export default function AdminHome({ user, onSelectOption, onOpenCreate, onOpenSh
               <button
                 type="button"
                 className="btn btn-secondary"
-                onClick={() => setSelectedResultsActivity(null)}
+                onClick={handleCloseResults}
               >
                 Close
               </button>

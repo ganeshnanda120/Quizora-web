@@ -30,8 +30,8 @@ export default function StudentSubmissionResult({
       <div className="student-result-container">
         {/* Brand Header */}
         <div className="student-result-brand text-center mb-6">
-          <img src={logoImg} alt="Quizora" className="student-result-logo" />
-          <h2 className="student-result-app-title">Quizora</h2>
+          <img src={logoImg} alt="Task Grade" className="student-result-logo" />
+          <h2 className="student-result-app-title">Task Grade</h2>
         </div>
 
         {/* Success Card */}
@@ -112,7 +112,7 @@ export default function StudentSubmissionResult({
         </div>
 
         <div className="result-footer text-center mt-6 text-xs text-muted">
-          <p>© {new Date().getFullYear()} Quizora Assessment Platform. All rights reserved.</p>
+          <p>© {new Date().getFullYear()} Task Grade Assessment Platform. All rights reserved.</p>
         </div>
       </div>
     </div>

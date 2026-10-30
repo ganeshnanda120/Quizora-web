@@ -249,7 +249,7 @@ export default function StudentActivityScreen({
     return (
       <div className="full-page-loader">
         <div className="loader-brand">
-          <img src={logoImg} alt="Quizora" className="loader-logo" />
+          <img src={logoImg} alt="Task Grade" className="loader-logo" />
         </div>
         <div className="spinner large"></div>
         <p>Loading activity details...</p>
@@ -263,8 +263,8 @@ export default function StudentActivityScreen({
       <div className="student-access-viewport fade-in">
         <div className="student-access-container">
           <div className="access-brand-header text-center mb-6">
-            <img src={logoImg} alt="Quizora" className="access-brand-logo" />
-            <h2 className="access-brand-title">Quizora</h2>
+            <img src={logoImg} alt="Task Grade" className="access-brand-logo" />
+            <h2 className="access-brand-title">Task Grade</h2>
           </div>
 
           <div className="access-status-card bg-white p-8 rounded-2xl shadow-lg border border-slate-100 text-center">
@@ -289,7 +289,7 @@ export default function StudentActivityScreen({
                 else window.location.href = '/';
               }}
             >
-              Go to Quizora Home
+              Go to Task Grade Home
             </button>
           </div>
         </div>
@@ -317,8 +317,8 @@ export default function StudentActivityScreen({
       <div className="student-access-viewport fade-in">
         <div className="student-access-container">
           <div className="access-brand-header text-center mb-6">
-            <img src={logoImg} alt="Quizora" className="access-brand-logo" />
-            <h2 className="access-brand-title">Quizora</h2>
+            <img src={logoImg} alt="Task Grade" className="access-brand-logo" />
+            <h2 className="access-brand-title">Task Grade</h2>
           </div>
 
           <div className="access-status-card expired-card bg-white p-8 rounded-2xl shadow-lg border border-slate-100 text-center">
@@ -391,8 +391,8 @@ export default function StudentActivityScreen({
       <div className="student-access-viewport fade-in">
         <div className="student-access-container">
           <div className="access-brand-header">
-            <img src={logoImg} alt="Quizora" className="access-brand-logo" />
-            <h2 className="access-brand-title">Quizora</h2>
+            <img src={logoImg} alt="Task Grade" className="access-brand-logo" />
+            <h2 className="access-brand-title">Task Grade</h2>
           </div>
 
           <div className="access-status-card">
@@ -470,8 +470,8 @@ export default function StudentActivityScreen({
       <div className="student-access-viewport fade-in">
         <div className="student-access-container">
           <div className="access-brand-header">
-            <img src={logoImg} alt="Quizora" className="access-brand-logo" />
-            <h2 className="access-brand-title">Quizora</h2>
+            <img src={logoImg} alt="Task Grade" className="access-brand-logo" />
+            <h2 className="access-brand-title">Task Grade</h2>
           </div>
 
           <div className="access-status-card not-started-card">
@@ -580,8 +580,8 @@ export default function StudentActivityScreen({
     <div className="student-access-viewport fade-in">
       <div className="student-access-container">
         <div className="access-brand-header">
-          <img src={logoImg} alt="Quizora" className="access-brand-logo" />
-          <h2 className="access-brand-title">Quizora</h2>
+          <img src={logoImg} alt="Task Grade" className="access-brand-logo" />
+          <h2 className="access-brand-title">Task Grade</h2>
         </div>
 
         <div className="access-status-card active-card">

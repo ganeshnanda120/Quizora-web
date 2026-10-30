@@ -1,4 +1,4 @@
-import { doc, getDoc, setDoc } from 'firebase/firestore';
+import { doc, getDoc, setDoc, onSnapshot } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { db, storage } from '../firebase';
 
@@ -272,6 +272,19 @@ export const saveUserProfile = async (uid, profileData, imageFile = null, fallba
     updatedAt: now
   };
 
+  if (profileData.role) {
+    userPayload.role = profileData.role;
+  }
+  if (profileData.isAdmin !== undefined) {
+    userPayload.isAdmin = profileData.isAdmin;
+  }
+  if (profileData.isStudent !== undefined) {
+    userPayload.isStudent = profileData.isStudent;
+  }
+  if (profileData.permissions) {
+    userPayload.permissions = profileData.permissions;
+  }
+
   if (profileData.createdAt || profileData.created_at) {
     userPayload.createdAt = profileData.createdAt || profileData.created_at;
   } else {
@@ -294,4 +307,39 @@ export const saveUserProfile = async (uid, profileData, imageFile = null, fallba
   }
 
   return normalizeUserProfile(uid, userPayload);
+};
+
+/**
+ * Real-time listener for user profile and permission changes
+ * @param {string} uid
+ * @param {function(object): void} onProfileChange
+ * @returns {function(): void} unsubscribe callback
+ */
+export const subscribeUserProfile = (uid, onProfileChange) => {
+  if (!uid || typeof onProfileChange !== 'function') return () => {};
+
+  try {
+    const userDocRef = doc(db, 'users', uid);
+    const unsubscribe = onSnapshot(
+      userDocRef,
+      (docSnap) => {
+        if (docSnap.exists()) {
+          const remoteData = normalizeUserProfile(uid, docSnap.data());
+          try {
+            localStorage.setItem(`quizora_user_${uid}`, JSON.stringify(remoteData));
+          } catch {
+            // Ignore quota errors
+          }
+          onProfileChange(remoteData);
+        }
+      },
+      (error) => {
+        console.warn('Real-time profile listener notice:', error.message);
+      }
+    );
+    return unsubscribe;
+  } catch (error) {
+    console.warn('Could not attach profile snapshot listener:', error.message);
+    return () => {};
+  }
 };

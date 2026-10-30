@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { getAdminSubmissions, getAdminActivities } from '../../services/adminService';
 import SubmissionChecker from './SubmissionChecker';
 
-export default function SubmissionsList({ user, onBack }) {
+export default function SubmissionsList({ user, onBack, filterActivityId }) {
   const [submissions, setSubmissions] = useState([]);
   const [activitiesMap, setActivitiesMap] = useState({});
   const [loading, setLoading] = useState(true);
@@ -49,6 +49,8 @@ export default function SubmissionsList({ user, onBack }) {
 
   // Filter and sort submissions
   const filteredSubmissions = submissions.filter((sub) => {
+    if (filterActivityId && sub.activityId !== filterActivityId) return false;
+
     const participantName = sub.participantDetails?.Name || sub.participantName || '';
     const rollNumber = sub.participantDetails?.['Roll Number'] || sub.participantDetails?.['Registration Number'] || '';
     const activityTitle = sub.activityTitle || activitiesMap[sub.activityId]?.title || '';

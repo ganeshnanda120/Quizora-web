@@ -149,7 +149,7 @@ export default function Login({ onNavigate }) {
     <div className="auth-card">
       <div className="auth-header">
         <div className="brand-badge logo-only">
-          <img src={logoImg} alt="Logo" className="brand-logo-img" />
+          <img src={logoImg} alt="Task Grade" className="brand-logo-img" />
         </div>
         <h1 className="auth-title">Welcome</h1>
         <p className="auth-subtitle">

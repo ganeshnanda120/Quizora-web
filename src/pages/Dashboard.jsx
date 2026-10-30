@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { signOut } from 'firebase/auth';
 import { auth } from '../firebase';
+import { useRouter, matchRoute } from '../router';
 import { getTimeBasedGreeting } from '../utils/greetingUtils';
 import ProfileModal from '../components/Profile/ProfileModal';
 import CreateActivityWizard from '../components/Admin/CreateActivityWizard';
@@ -10,12 +11,22 @@ import { getActivityById } from '../services/activityService';
 import logoImg from '../assets/logo.png';
 
 export default function Dashboard({ user, profileData, onProfileUpdated }) {
-  const [activeSection, setActiveSection] = useState('user'); // 'selector', 'user', 'admin'
+  const { currentPath, navigate, goBack } = useRouter();
+
+  // Active section derived from URL path
+  const activeSection = currentPath.startsWith('/admin') ? 'admin' : 'user';
+
   const [historyFilter, setHistoryFilter] = useState('all'); // 'all', 'user', 'admin'
   const [showDropdown, setShowDropdown] = useState(false);
-  const [modalMode, setModalMode] = useState(null); // null, 'view', or 'edit'
-  const [showCreateWizard, setShowCreateWizard] = useState(false);
   const [shareActivityData, setShareActivityData] = useState(null);
+
+  // Derived router modal states
+  const isProfileRoute = currentPath === '/profile' || currentPath === '/profile/edit';
+  const modalMode = currentPath === '/profile/edit' ? 'edit' : (currentPath === '/profile' ? 'view' : null);
+  const showCreateWizard = currentPath === '/admin/create';
+
+  const submissionsMatch = matchRoute('/admin/submissions/:activityId', currentPath);
+  const resultsMatch = matchRoute('/admin/results/:activityId', currentPath);
 
   // User Dashboard: Paste Exam URL state
   const [examUrl, setExamUrl] = useState('');
@@ -48,6 +59,7 @@ export default function Dashboard({ user, profileData, onProfileUpdated }) {
     try {
       setShowDropdown(false);
       await signOut(auth);
+      navigate('/login');
     } catch (error) {
       console.error("Error signing out:", error);
     }
@@ -119,7 +131,7 @@ export default function Dashboard({ user, profileData, onProfileUpdated }) {
 
   const handleAdminOptionSelect = (option) => {
     if (option === 'CREATE') {
-      setShowCreateWizard(true);
+      navigate('/admin/create');
     }
   };
 
@@ -138,8 +150,8 @@ export default function Dashboard({ user, profileData, onProfileUpdated }) {
         <div className="dashboard-header-inner">
           {/* Left Side: Brand Logo + Greeting with space */}
           <div className="header-left-group">
-            <div className="header-brand-box" title="Quizora">
-              <img src={logoImg} alt="Quizora" className="navbar-logo-img" />
+            <div className="header-brand-box" title="Task Grade">
+              <img src={logoImg} alt="Task Grade" className="navbar-logo-img" />
             </div>
 
             <div className="header-greeting-box">
@@ -189,7 +201,7 @@ export default function Dashboard({ user, profileData, onProfileUpdated }) {
                   className="dropdown-item"
                   onClick={() => {
                     setShowDropdown(false);
-                    setModalMode('view');
+                    navigate('/profile');
                   }}
                 >
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -203,7 +215,7 @@ export default function Dashboard({ user, profileData, onProfileUpdated }) {
                   className="dropdown-item"
                   onClick={() => {
                     setShowDropdown(false);
-                    setModalMode('edit');
+                    navigate('/profile/edit');
                   }}
                 >
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -237,7 +249,7 @@ export default function Dashboard({ user, profileData, onProfileUpdated }) {
           <div className="section-tabs">
             <button
               className={`section-tab-btn ${activeSection === 'user' ? 'active' : ''}`}
-              onClick={() => setActiveSection('user')}
+              onClick={() => navigate('/dashboard')}
             >
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                 <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
@@ -248,7 +260,7 @@ export default function Dashboard({ user, profileData, onProfileUpdated }) {
 
             <button
               className={`section-tab-btn ${activeSection === 'admin' ? 'active' : ''}`}
-              onClick={() => setActiveSection('admin')}
+              onClick={() => navigate('/admin')}
             >
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                 <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
@@ -277,7 +289,7 @@ export default function Dashboard({ user, profileData, onProfileUpdated }) {
                 <button
                   type="button"
                   className="btn btn-primary btn-lg"
-                  onClick={() => setActiveSection('user')}
+                  onClick={() => navigate('/dashboard')}
                 >
                   <span>Continue as User &rarr;</span>
                 </button>
@@ -297,7 +309,7 @@ export default function Dashboard({ user, profileData, onProfileUpdated }) {
                 <button
                   type="button"
                   className="btn btn-secondary btn-lg"
-                  onClick={() => setActiveSection('admin')}
+                  onClick={() => navigate('/admin')}
                 >
                   <span>Continue as Admin &rarr;</span>
                 </button>
@@ -447,8 +459,8 @@ export default function Dashboard({ user, profileData, onProfileUpdated }) {
                           setSectionSelectionError('Please choose your section to continue.');
                           return;
                         }
-                        // Proceed to start activity with chosen section
-                        alert(`Starting ${joinedActivity.title}${hasSections ? ` for Section "${joinedActivity.sections[selectedSectionIdx]?.name}"` : ''}!`);
+                        const queryParam = hasSections && selectedSectionIdx !== null ? `?section=${selectedSectionIdx}` : '';
+                        navigate(`/activity/${joinedActivity.activityId}${queryParam}`);
                       }}
                     >
                       Start {joinedActivity.purpose || 'Activity'} &rarr;
@@ -542,20 +554,34 @@ export default function Dashboard({ user, profileData, onProfileUpdated }) {
             <AdminHome
               user={user}
               onSelectOption={handleAdminOptionSelect}
-              onOpenCreate={() => setShowCreateWizard(true)}
+              onOpenCreate={() => navigate('/admin/create')}
               onOpenShareLink={(act) => setShareActivityData(act)}
+              onOpenSubmissions={(act) => navigate(`/admin/submissions/${act.activityId}`)}
+              onOpenResults={(act) => navigate(`/admin/results/${act.activityId}`)}
+              onCloseModal={() => navigate('/admin')}
+              initialSubmissionsActivityId={submissionsMatch?.activityId || (currentPath === '/admin/submissions' ? 'all' : null)}
+              initialResultsActivityId={resultsMatch?.activityId || null}
             />
           </div>
         )}
       </main>
 
       {/* Profile Modal for View / Edit */}
-      {modalMode && (
+      {isProfileRoute && (
         <ProfileModal
           user={user}
           profileData={profileData}
-          initialMode={modalMode}
-          onClose={() => setModalMode(null)}
+          initialMode={modalMode || 'view'}
+          onModeChange={(newMode) => {
+            navigate(newMode === 'edit' ? '/profile/edit' : '/profile');
+          }}
+          onClose={() => {
+            if (window.history.length > 1) {
+              goBack();
+            } else {
+              navigate('/dashboard');
+            }
+          }}
           onProfileUpdated={(updated) => {
             if (onProfileUpdated) onProfileUpdated(updated);
           }}
@@ -568,7 +594,7 @@ export default function Dashboard({ user, profileData, onProfileUpdated }) {
         <CreateActivityWizard
           user={user}
           profileData={profileData}
-          onClose={() => setShowCreateWizard(false)}
+          onClose={() => navigate('/admin')}
         />
       )}
 

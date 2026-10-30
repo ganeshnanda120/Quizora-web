@@ -195,7 +195,7 @@ export default function CreateActivityWizard({ user, profileData, onClose, onAct
 
           <div className="wizard-header-right">
             <div className="brand-badge-sm">
-              <img src={logoImg} alt="Quizora" className="brand-logo-img" />
+              <img src={logoImg} alt="Task Grade" className="brand-logo-img" />
               <span className="wizard-header-title">Activity Creator</span>
             </div>
           </div>
