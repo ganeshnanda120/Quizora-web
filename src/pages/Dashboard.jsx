@@ -27,6 +27,30 @@ export default function Dashboard({ user, profileData, onProfileUpdated }) {
 
   const submissionsMatch = matchRoute('/admin/submissions/:activityId', currentPath);
   const resultsMatch = matchRoute('/admin/results/:activityId', currentPath);
+  const editMatch = matchRoute('/admin/edit/:activityId', currentPath);
+  const editingActivityId = editMatch?.activityId || null;
+  const [editingActivity, setEditingActivity] = useState(null);
+
+  // Fetch activity payload if navigated directly to /admin/edit/:activityId
+  useEffect(() => {
+    let isMounted = true;
+    if (editingActivityId && (!editingActivity || editingActivity.activityId !== editingActivityId)) {
+      getActivityById(editingActivityId).then((act) => {
+        if (isMounted) {
+          if (act) {
+            setEditingActivity(act);
+          } else {
+            navigate('/admin');
+          }
+        }
+      });
+    }
+    return () => {
+      isMounted = false;
+    };
+  }, [editingActivityId, editingActivity, navigate]);
+
+  const showEditWizard = Boolean(editingActivityId && editingActivity);
 
   // User Dashboard: Paste Exam URL state
   const [examUrl, setExamUrl] = useState('');
@@ -555,6 +579,10 @@ export default function Dashboard({ user, profileData, onProfileUpdated }) {
               user={user}
               onSelectOption={handleAdminOptionSelect}
               onOpenCreate={() => navigate('/admin/create')}
+              onEditActivity={(act) => {
+                setEditingActivity(act);
+                navigate(`/admin/edit/${act.activityId}`);
+              }}
               onOpenShareLink={(act) => setShareActivityData(act)}
               onOpenSubmissions={(act) => navigate(`/admin/submissions/${act.activityId}`)}
               onOpenResults={(act) => navigate(`/admin/results/${act.activityId}`)}
@@ -589,12 +617,24 @@ export default function Dashboard({ user, profileData, onProfileUpdated }) {
         />
       )}
 
-      {/* Admin Activity Creation Wizard Modal */}
-      {showCreateWizard && (
+      {/* Admin Activity Creation / Edit Wizard Modal */}
+      {(showCreateWizard || showEditWizard) && (
         <CreateActivityWizard
+          key={showEditWizard ? `edit_${editingActivityId}` : 'create_new'}
           user={user}
           profileData={profileData}
-          onClose={() => navigate('/admin')}
+          initialActivity={showEditWizard ? editingActivity : null}
+          onClose={() => {
+            setEditingActivity(null);
+            navigate('/admin');
+          }}
+          onActivityCreated={() => {
+            navigate('/admin');
+          }}
+          onActivityUpdated={() => {
+            setEditingActivity(null);
+            navigate('/admin');
+          }}
         />
       )}
 

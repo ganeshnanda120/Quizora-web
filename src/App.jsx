@@ -47,6 +47,9 @@ const isKnownDashboardRoute = (path) => {
   if (matchRoute('/admin/results/:activityId', path)) {
     return true;
   }
+  if (matchRoute('/admin/edit/:activityId', path)) {
+    return true;
+  }
   return false;
 };
 

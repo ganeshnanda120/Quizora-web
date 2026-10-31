@@ -17,7 +17,8 @@ export default function Step4ParticipantForm({
   onNext,
   onBack,
   onResetQuestions,
-  saving
+  saving,
+  isEditMode = false
 }) {
   const [error, setError] = useState('');
   const [showCancelModal, setShowCancelModal] = useState(false);
@@ -495,10 +496,10 @@ export default function Step4ParticipantForm({
           {saving ? (
             <div className="spinner-container">
               <div className="spinner"></div>
-              <span>Finalizing Activity...</span>
+              <span>{isEditMode ? 'Saving Changes...' : 'Finalizing Activity...'}</span>
             </div>
           ) : (
-            <span>Complete &amp; Generate Link &rarr;</span>
+            <span>{isEditMode ? 'Save Changes & Update Activity' : 'Complete & Generate Link \u2192'}</span>
           )}
         </button>
       </div>

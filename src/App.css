@@ -4999,6 +4999,18 @@ input[type="number"] {
   color: #15803d;
 }
 
+.btn-edit {
+  background: #f8fafc;
+  color: #2563eb;
+  border-color: #cbd5e1;
+}
+
+.btn-edit:hover {
+  background: #eff6ff;
+  color: #1d4ed8;
+  border-color: #93c5fd;
+}
+
 .btn-results {
   background: #e0e7ff;
   color: #4338ca;

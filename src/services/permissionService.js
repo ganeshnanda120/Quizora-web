@@ -292,6 +292,11 @@ export const ROUTE_PERMISSIONS = {
     permission: PERMISSIONS.CREATE_ACTIVITY,
     description: 'Activity Creator Wizard'
   },
+  '/admin/edit': {
+    authRequired: true,
+    permission: PERMISSIONS.MANAGE_ACTIVITY,
+    description: 'Edit Activity'
+  },
   '/admin/submissions': {
     authRequired: true,
     permission: PERMISSIONS.VIEW_SUBMISSIONS,
@@ -338,6 +343,8 @@ export const canAccessRoute = (path, profileData, user) => {
       routeConfig = ROUTE_PERMISSIONS['/admin/submissions'];
     } else if (path.startsWith('/admin/results/')) {
       routeConfig = ROUTE_PERMISSIONS['/admin/results'];
+    } else if (path.startsWith('/admin/edit/')) {
+      routeConfig = ROUTE_PERMISSIONS['/admin/edit'];
     } else if (path.startsWith('/admin')) {
       routeConfig = ROUTE_PERMISSIONS['/admin'];
     }

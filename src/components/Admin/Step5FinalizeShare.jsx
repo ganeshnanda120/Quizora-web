@@ -1,6 +1,6 @@
 import { useState } from 'react';
 
-export default function Step5FinalizeShare({ activityId, shareUrl, activityData, onClose }) {
+export default function Step5FinalizeShare({ activityId, shareUrl, activityData, onClose, isEditMode = false }) {
   const [copied, setCopied] = useState(false);
   const [shareNotice, setShareNotice] = useState('');
 
@@ -48,9 +48,13 @@ export default function Step5FinalizeShare({ activityId, shareUrl, activityData,
         </svg>
       </div>
 
-      <h2 className="wizard-step-title">Activity Created Successfully!</h2>
+      <h2 className="wizard-step-title">
+        {isEditMode ? 'Activity Updated Successfully!' : 'Activity Created Successfully!'}
+      </h2>
       <p className="wizard-step-subtitle">
-        Your activity is now live and ready. The activity URL below is permanent and will not change.
+        {isEditMode
+          ? 'Your changes have been saved to this activity. The shared URL below is permanent and unchanged.'
+          : 'Your activity is now live and ready. The activity URL below is permanent and will not change.'}
       </p>
 
       {/* Summary Pill Details */}

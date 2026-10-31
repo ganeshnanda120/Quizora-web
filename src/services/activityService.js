@@ -292,6 +292,90 @@ export const publishActivity = async (activityId, fullPayload) => {
 };
 
 /**
+ * Updates an existing activity in-place while strictly preserving its original ID,
+ * permanent share URL, creation metadata, and participant submissions.
+ * @param {string} activityId 
+ * @param {object} updatedData 
+ * @param {object} user 
+ * @param {object|null} profileData 
+ * @returns {Promise<object>} Updated payload
+ */
+export const updateExistingActivity = async (activityId, updatedData, user, profileData = null) => {
+  if (!activityId) throw new Error("Activity ID is required for updating.");
+
+  // 1. Authorization verification
+  if (user && updatedData.adminUid && updatedData.adminUid !== user.uid) {
+    // Check if user has admin permission or role override
+    const isSuperOrMain = profileData?.isMainAdmin || profileData?.isAdmin || profileData?.role === 'admin' || profileData?.role === 'main_admin';
+    if (!isSuperOrMain) {
+      throw new Error("Unauthorized: You can only edit activities that you created.");
+    }
+  }
+
+  const origin = typeof window !== 'undefined' ? window.location.origin : '';
+  const permanentUrl = updatedData.shareUrl || `${origin}/activity/${activityId}`;
+  const now = new Date().toISOString();
+  const normalizedData = normalizeTimePayload(updatedData);
+
+  // Preserve core immutable attributes
+  const rawPayload = {
+    ...normalizedData,
+    activityId,
+    shareUrl: permanentUrl,
+    updatedAt: now
+  };
+
+  // Ensure createdAt is never overwritten with newer timestamp
+  if (updatedData.createdAt) {
+    rawPayload.createdAt = updatedData.createdAt;
+  }
+  if (updatedData.adminUid) {
+    rawPayload.adminUid = updatedData.adminUid;
+  }
+  if (updatedData.adminName) {
+    rawPayload.adminName = updatedData.adminName;
+  }
+
+  const finalPayload = sanitizeFirestorePayload(rawPayload);
+
+  // Update local cache
+  try {
+    localStorage.setItem(`quizora_activity_${activityId}`, JSON.stringify(finalPayload));
+  } catch {
+    // Ignore quota issues
+  }
+
+  // Persist to Firestore with merge: true to protect existing fields and subcollections
+  try {
+    const docRef = doc(db, 'activities', activityId);
+    await setDoc(docRef, finalPayload, { merge: true });
+    console.log(`[Task Grade] Activity ${activityId} successfully updated with merge: true.`);
+  } catch (err) {
+    console.warn("Firestore activity update notice:", err.message);
+    if (err.message && err.message.includes('exceeds the maximum allowed size')) {
+      try {
+        const slimmedPayload = JSON.parse(JSON.stringify(finalPayload), (key, val) => {
+          if (typeof val === 'string' && val.startsWith('data:') && val.length > 200000 && (key === 'fileUrl' || key === 'paperFileUrl' || key === 'imageUrl')) {
+            return '';
+          }
+          return val;
+        });
+        const docRef = doc(db, 'activities', activityId);
+        await setDoc(docRef, slimmedPayload, { merge: true });
+        console.log(`[Task Grade] Activity updated with slimmed payload: ${activityId}`);
+      } catch (retryErr) {
+        console.error("Firestore update retry failed:", retryErr.message);
+        throw new Error("Activity contains documents that are too large for Firestore. Please upload smaller PDFs/images under 1MB.", { cause: retryErr });
+      }
+    } else {
+      throw err;
+    }
+  }
+
+  return finalPayload;
+};
+
+/**
  * Fetch an activity by ID from Firestore or local cache
  * @param {string} activityId 
  * @returns {Promise<object|null>}
