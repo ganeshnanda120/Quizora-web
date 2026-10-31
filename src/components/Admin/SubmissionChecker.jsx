@@ -1,6 +1,11 @@
 import { useState, useMemo } from 'react';
 import { saveSubmissionGrade } from '../../services/adminService';
-import { normalizeActivityQuestions } from '../../utils/questionUtils';
+import {
+  normalizeActivityQuestions,
+  isQuestionAnswered,
+  getQuestionUploadedFiles,
+  getQuestionDescriptionText
+} from '../../utils/questionUtils';
 
 export default function SubmissionChecker({ submission, activity, onClose, onGraded }) {
   const normalized = useMemo(() => normalizeActivityQuestions(activity), [activity]);
@@ -48,9 +53,7 @@ export default function SubmissionChecker({ submission, activity, onClose, onGra
         const maxM = q.marks ? parseFloat(q.marks) : 0;
         totalMaxMarks += maxM;
 
-        const studentAns = submission.answers?.[q.id];
-
-        if (studentAns === undefined || studentAns === null || studentAns === '' || (Array.isArray(studentAns) && studentAns.length === 0)) {
+        if (!isQuestionAnswered(q, submission.answers)) {
           unansweredCount++;
         }
 
@@ -143,6 +146,10 @@ export default function SubmissionChecker({ submission, activity, onClose, onGra
 
                   {part.questions.map((q, qIdx) => {
                     const studentAnswer = submission.answers?.[q.id] || submission.answers?.[`${q.id}_files`];
+                    const studentFiles = getQuestionUploadedFiles(q.id, submission.answers);
+                    const studentNotes = getQuestionDescriptionText(q.id, submission.answers);
+                    const hasUploadedFiles = studentFiles.length > 0;
+                    const hasWrittenNotes = typeof studentNotes === 'string' && studentNotes.trim().length > 0;
                     const currentGrade = grades[q.id] || { marksAwarded: '', feedback: '' };
 
                     return (
@@ -197,11 +204,11 @@ export default function SubmissionChecker({ submission, activity, onClose, onGra
                                   </div>
                                 )}
                               </div>
-                            ) : q.type === 'upload' || (typeof studentAnswer === 'object' && studentAnswer?.url) || Array.isArray(studentAnswer) ? (
+                            ) : q.type === 'upload' ? (
                               <div className="upload-answer-display">
-                                {Array.isArray(studentAnswer) && studentAnswer.length > 0 ? (
-                                  <div className="flex flex-col gap-2">
-                                    {studentAnswer.map((fileObj, fIdx) => (
+                                {hasUploadedFiles ? (
+                                  <div className="flex flex-col gap-2 mb-2">
+                                    {studentFiles.map((fileObj, fIdx) => (
                                       <div key={fileObj.id || fIdx} className="flex-align-center gap-2">
                                         <a
                                           href={fileObj.url}
@@ -214,21 +221,20 @@ export default function SubmissionChecker({ submission, activity, onClose, onGra
                                       </div>
                                     ))}
                                   </div>
-                                ) : typeof studentAnswer === 'string' && (studentAnswer.startsWith('http') || studentAnswer.startsWith('data:')) ? (
-                                  <a href={studentAnswer} target="_blank" rel="noopener noreferrer" className="btn btn-secondary btn-sm">
-                                    📁 Open Submitted File ↗
-                                  </a>
-                                ) : typeof studentAnswer === 'object' && studentAnswer?.url ? (
-                                  <a href={studentAnswer.url} target="_blank" rel="noopener noreferrer" className="btn btn-secondary btn-sm">
-                                    📁 Open {studentAnswer.name || 'Submitted File'} ↗
-                                  </a>
+                                ) : !hasWrittenNotes ? (
+                                  <p className="written-answer-text text-muted italic">No file or response submitted.</p>
                                 ) : (
-                                  <p className="written-answer-text">{typeof studentAnswer === 'string' && studentAnswer ? studentAnswer : 'No file or response submitted.'}</p>
+                                  <p className="text-xs text-muted mb-2 font-medium">No file attached (written explanation provided below):</p>
                                 )}
-                                {submission.answers?.[`${q.id}_notes`] && (
-                                  <p className="student-notes-quote mt-2 text-xs text-muted">
-                                    <strong>Notes:</strong> {submission.answers[`${q.id}_notes`]}
-                                  </p>
+                                {hasWrittenNotes && (
+                                  <div className="student-upload-notes-box mt-2 p-3 bg-slate-50 border border-slate-200 rounded-lg">
+                                    <span className="text-xs font-bold text-slate-700 block mb-1">
+                                      Written Explanation / Description:
+                                    </span>
+                                    <p className="text-xs text-slate-800 whitespace-pre-wrap m-0">
+                                      {studentNotes}
+                                    </p>
+                                  </div>
                                 )}
                               </div>
                             ) : (

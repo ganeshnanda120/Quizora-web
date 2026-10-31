@@ -1,7 +1,11 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import { uploadStudentAnswerFile } from '../../services/submissionService';
 import { getSynchronizedTime, parseActivityTime } from '../../services/timeSyncService';
-import { normalizeActivityQuestions } from '../../utils/questionUtils';
+import {
+  normalizeActivityQuestions,
+  getQuestionUploadedFiles,
+  isQuestionAnswered as checkQuestionAnswered
+} from '../../utils/questionUtils';
 import logoImg from '../../assets/logo.png';
 
 export default function StudentAttendancePaper({
@@ -283,50 +287,14 @@ export default function StudentAttendancePaper({
 
   // Helper to extract clean array of uploaded answer files for a question
   const getUploadedAnswerFiles = useCallback((questionId) => {
-    const raw = answers[questionId] || answers[`${questionId}_files`];
-    if (Array.isArray(raw)) {
-      return raw.filter((item) => item && typeof item === 'object' && item.url);
-    }
-    if (raw && typeof raw === 'object' && raw.url) {
-      return [raw];
-    }
-    if (typeof raw === 'string' && (raw.startsWith('http') || raw.startsWith('data:'))) {
-      return [{
-        id: `file_${questionId}_0`,
-        url: raw,
-        name: 'Uploaded Answer File',
-        type: raw.match(/\.(jpg|jpeg|png|webp)/i) ? 'image' : 'pdf'
-      }];
-    }
-    return [];
+    return getQuestionUploadedFiles(questionId, answers);
   }, [answers]);
 
-  // Check if a question is answered
+  // Check if a question is answered using single source of truth validator
   const isQuestionAnswered = useCallback((questionId) => {
-    const q = questionsById?.[questionId];
-    const val = answers[questionId];
-    const uploadedFiles = getUploadedAnswerFiles(questionId);
-
-    // For Upload questions: considered answered ONLY if a valid file has been selected/uploaded
-    if (q?.type === 'upload' || q?.type === 'upload_paper') {
-      return uploadedFiles.length > 0;
-    }
-
-    // For Written questions:
-    if (q?.type === 'written') {
-      return typeof val === 'string' && val.trim().length > 0;
-    }
-
-    // For MCQ:
-    if (Array.isArray(val)) return val.length > 0;
-    if (typeof val === 'number') return true;
-    if (val !== undefined && val !== null && val !== '') return true;
-
-    // Fallback:
-    if (uploadedFiles.length > 0) return true;
-    if (typeof val === 'string' && val.trim().length > 0) return true;
-    return false;
-  }, [answers, questionsById, getUploadedAnswerFiles]);
+    const q = questionsById?.[questionId] || { id: questionId };
+    return checkQuestionAnswered(q, answers);
+  }, [answers, questionsById]);
 
   // Count answered questions in active part
   const activePartAnsweredCount = useMemo(() => {
@@ -482,6 +450,8 @@ export default function StudentAttendancePaper({
       delete copy[questionId];
       delete copy[`${questionId}_files`];
       delete copy[`${questionId}_notes`];
+      delete copy[`${questionId}_description`];
+      delete copy[`${questionId}_text`];
       return copy;
     });
   };
@@ -590,7 +560,7 @@ export default function StudentAttendancePaper({
   const handleConfirmSubmit = async () => {
     setSubmissionValidationError('');
 
-    // Check if any required Upload question has no uploaded file
+    // Check if any required Upload question is unanswered (neither file uploaded nor written description provided)
     const unuploadedRequiredQ = allQuestionsList.find((q) => {
       if ((q.type === 'upload' || q.type === 'upload_paper') && q.answerRequired === true) {
         return !isQuestionAnswered(q.id);
@@ -601,7 +571,7 @@ export default function StudentAttendancePaper({
     if (unuploadedRequiredQ) {
       const qIndexInAll = allQuestionsList.findIndex((q) => q.id === unuploadedRequiredQ.id);
       setSubmissionValidationError(
-        `Please upload the required answer file for Question ${qIndexInAll + 1} (${unuploadedRequiredQ.questionText || unuploadedRequiredQ.fileName || 'Upload Question'}) before submitting.`
+        `Please provide an answer (written description or uploaded file) for Question ${qIndexInAll + 1} (${unuploadedRequiredQ.questionText || unuploadedRequiredQ.fileName || 'Upload Question'}) before submitting.`
       );
       return;
     }
@@ -1337,7 +1307,7 @@ export default function StudentAttendancePaper({
                       rows="3"
                       className="form-input text-xs"
                       placeholder="Add any additional notes or details about your uploaded solution..."
-                      value={answers[`${currentQuestion.id}_notes`] || ''}
+                      value={answers[`${currentQuestion.id}_notes`] ?? answers[`${currentQuestion.id}_description`] ?? answers[`${currentQuestion.id}_text`] ?? ''}
                       onChange={(e) => setAnswers((prev) => ({ ...prev, [`${currentQuestion.id}_notes`]: e.target.value }))}
                     />
                   </div>

@@ -606,3 +606,198 @@ export const normalizeActivityQuestions = (activity) => {
   };
 };
 
+/**
+ * Safely extracts array of valid uploaded answer files for a question.
+ * Only files with a valid non-empty URL string are counted.
+ * Failed, cancelled, or pending uploads without a URL are not counted.
+ * 
+ * @param {string} questionId 
+ * @param {object} answers 
+ * @returns {Array<{ id?: string, url: string, name?: string, type?: string, size?: number }>}
+ */
+export const getQuestionUploadedFiles = (questionId, answers = {}) => {
+  if (!answers || !questionId) return [];
+
+  const raw = answers[questionId] || answers[`${questionId}_files`];
+
+  // 1. Array of file objects
+  if (Array.isArray(raw)) {
+    return raw.filter((item) => item && typeof item === 'object' && typeof item.url === 'string' && item.url.trim().length > 0);
+  }
+
+  // 2. Single file object
+  if (raw && typeof raw === 'object' && typeof raw.url === 'string' && raw.url.trim().length > 0) {
+    return [raw];
+  }
+
+  // 3. String URL (e.g. storage download URL or data URI)
+  if (typeof raw === 'string' && (raw.startsWith('http://') || raw.startsWith('https://') || raw.startsWith('data:'))) {
+    return [{
+      id: `file_${questionId}_0`,
+      url: raw,
+      name: 'Uploaded Answer File',
+      type: raw.match(/\.(jpg|jpeg|png|webp)/i) ? 'image' : 'pdf'
+    }];
+  }
+
+  return [];
+};
+
+/**
+ * Safely extracts the written description / notes for an upload or written question.
+ * Checks dedicated keys (`${questionId}_notes`, `${questionId}_description`, `${questionId}_text`)
+ * and nested properties. Treats whitespace-only text as empty.
+ * 
+ * @param {string} questionId 
+ * @param {object} answers 
+ * @returns {string}
+ */
+export const getQuestionDescriptionText = (questionId, answers = {}) => {
+  if (!answers || !questionId) return '';
+
+  // 1. Check dedicated notes/description/text keys
+  const notesKey = answers[`${questionId}_notes`];
+  if (typeof notesKey === 'string' && notesKey.trim().length > 0) {
+    return notesKey;
+  }
+  const descKey = answers[`${questionId}_description`];
+  if (typeof descKey === 'string' && descKey.trim().length > 0) {
+    return descKey;
+  }
+  const textKey = answers[`${questionId}_text`];
+  if (typeof textKey === 'string' && textKey.trim().length > 0) {
+    return textKey;
+  }
+
+  // 2. Check main question entry
+  const raw = answers[questionId];
+  if (typeof raw === 'string' && raw.trim().length > 0) {
+    // If not a URL (i.e. it is written text, not a file URL string)
+    if (!raw.startsWith('http://') && !raw.startsWith('https://') && !raw.startsWith('data:')) {
+      return raw;
+    }
+  }
+
+  // 3. Check object fields
+  if (raw && typeof raw === 'object' && !Array.isArray(raw)) {
+    if (typeof raw.notes === 'string' && raw.notes.trim().length > 0) {
+      return raw.notes;
+    }
+    if (typeof raw.description === 'string' && raw.description.trim().length > 0) {
+      return raw.description;
+    }
+    if (typeof raw.text === 'string' && raw.text.trim().length > 0) {
+      return raw.text;
+    }
+  }
+
+  return '';
+};
+
+/**
+ * Unified answer validator for any question type (Upload, MCQ, Written).
+ * Single source of truth across student attendance, final submit validation,
+ * review summary, and admin grading.
+ * 
+ * For Upload questions:
+ * Answered = Valid written description OR Successfully uploaded file.
+ * - Description only -> Answered
+ * - File only -> Answered
+ * - Both description and file -> Answered
+ * - Neither -> Unanswered
+ * 
+ * @param {object|string} questionOrId Question object or Question ID string
+ * @param {object} answers Full answers map
+ * @returns {boolean}
+ */
+export const isQuestionAnswered = (questionOrId, answers = {}) => {
+  if (!questionOrId || !answers) return false;
+
+  const isObject = typeof questionOrId === 'object';
+  const qId = isObject ? (questionOrId.id || questionOrId._id || questionOrId.questionId) : questionOrId;
+  if (!qId) return false;
+
+  const rawType = isObject ? String(questionOrId.type || questionOrId.questionType || '').toLowerCase().trim() : '';
+
+  const isUpload =
+    rawType === 'upload' ||
+    rawType === 'upload_paper' ||
+    rawType === 'uploadpaper' ||
+    rawType === 'upload_file' ||
+    rawType === 'upload-file' ||
+    rawType === 'file_upload' ||
+    rawType === 'fileupload';
+
+  const isWritten =
+    rawType === 'written' ||
+    rawType === 'text' ||
+    rawType === 'descriptive' ||
+    rawType === 'essay';
+
+  const isMcq =
+    rawType === 'mcq' ||
+    rawType === 'multiple_choice' ||
+    rawType === 'single';
+
+  const uploadedFiles = getQuestionUploadedFiles(qId, answers);
+  const descriptionText = getQuestionDescriptionText(qId, answers);
+  const hasValidFile = uploadedFiles.length > 0;
+  const hasValidDescription = typeof descriptionText === 'string' && descriptionText.trim().length > 0;
+
+  // 1. Explicit Upload Question Type
+  // Answered if at least ONE of: valid description OR successfully uploaded file
+  if (isUpload) {
+    return hasValidFile || hasValidDescription;
+  }
+
+  // 2. Explicit Written Question Type
+  if (isWritten) {
+    const rawVal = answers[qId];
+    if (typeof rawVal === 'string' && rawVal.trim().length > 0) return true;
+    return hasValidDescription;
+  }
+
+  // 3. Explicit MCQ Question Type
+  if (isMcq) {
+    const mcqVal = answers[qId];
+    if (Array.isArray(mcqVal)) return mcqVal.length > 0;
+    if (typeof mcqVal === 'number') return true;
+    if (mcqVal !== undefined && mcqVal !== null && mcqVal !== '') return true;
+    return false;
+  }
+
+  // 4. Fallback when type is unknown or questionOrId is just an ID
+  if (hasValidFile) return true;
+  if (hasValidDescription) return true;
+
+  const val = answers[qId];
+  if (Array.isArray(val)) return val.length > 0;
+  if (typeof val === 'number') return true;
+  if (typeof val === 'string' && val.trim().length > 0) return true;
+  if (val !== undefined && val !== null && val !== '') return true;
+
+  return false;
+};
+
+/**
+ * Counts total answered questions in a questions array.
+ * @param {Array} questions 
+ * @param {object} answers 
+ * @returns {number}
+ */
+export const countAnsweredQuestions = (questions = [], answers = {}) => {
+  if (!Array.isArray(questions)) return 0;
+  return questions.filter((q) => isQuestionAnswered(q, answers)).length;
+};
+
+/**
+ * Counts total unanswered questions in a questions array.
+ * @param {Array} questions 
+ * @param {object} answers 
+ * @returns {number}
+ */
+export const countUnansweredQuestions = (questions = [], answers = {}) => {
+  if (!Array.isArray(questions)) return 0;
+  return questions.filter((q) => !isQuestionAnswered(q, answers)).length;
+};
+

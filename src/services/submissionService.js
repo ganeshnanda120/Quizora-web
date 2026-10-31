@@ -1,7 +1,7 @@
 import { doc, setDoc } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { db, storage } from '../firebase';
-import { normalizeActivityQuestions } from '../utils/questionUtils';
+import { normalizeActivityQuestions, isQuestionAnswered } from '../utils/questionUtils';
 
 /**
  * Uploads a student answer file (e.g. photo or PDF of written work) to Firebase Storage
@@ -154,6 +154,9 @@ export const submitStudentActivity = async (activityId, submissionPayload) => {
   const { allQuestions } = normalizeActivityQuestions(submissionPayload.activity);
   const hasManualQuestions = allQuestions.some((q) => q && q.type !== 'mcq');
 
+  // Accurately calculate total unanswered count across all question types (MCQ, written, upload)
+  const totalUnanswered = allQuestions.filter((q) => !isQuestionAnswered(q, submissionPayload.answers)).length;
+
   const finalPayload = {
     ...submissionPayload,
     submissionId,
@@ -166,7 +169,7 @@ export const submitStudentActivity = async (activityId, submissionPayload) => {
     score: mcqGrading.totalMcqObtained,
     correctAnswers: mcqGrading.correctCount,
     incorrectAnswers: mcqGrading.incorrectCount,
-    unansweredQuestions: mcqGrading.unansweredCount
+    unansweredQuestions: totalUnanswered
   };
 
   // Cache locally
