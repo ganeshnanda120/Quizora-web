@@ -1,4 +1,4 @@
-import { doc, getDoc, setDoc, deleteDoc, collection, query, where, getDocs } from 'firebase/firestore';
+import { doc, getDoc, setDoc, deleteDoc, collection, query, where, getDocs, onSnapshot } from 'firebase/firestore';
 import { db } from '../firebase';
 import { generateActivityId } from './activityService';
 
@@ -38,15 +38,15 @@ export const computeActivityStatus = (activity) => {
 export const getAdminActivities = async (adminUid) => {
   if (!adminUid) return [];
 
-  const activities = [];
+  const activityMap = new Map();
   const localKeys = Object.keys(localStorage).filter((k) => k.startsWith('quizora_activity_'));
 
-  // Load from local storage cache
+  // 1. Load from local storage cache first
   localKeys.forEach((key) => {
     try {
       const item = JSON.parse(localStorage.getItem(key) || '{}');
-      if (item.adminUid === adminUid) {
-        activities.push({
+      if (item.adminUid === adminUid && item.activityId) {
+        activityMap.set(item.activityId, {
           ...item,
           computedStatus: computeActivityStatus(item)
         });
@@ -56,29 +56,82 @@ export const getAdminActivities = async (adminUid) => {
     }
   });
 
-  // Query Firestore
+  // 2. Query Firestore and merge
   try {
     const q = query(collection(db, 'activities'), where('adminUid', '==', adminUid));
     const snap = await getDocs(q);
-    const firestoreActivities = [];
 
     snap.forEach((docSnap) => {
       const data = docSnap.data();
-      firestoreActivities.push({
+      const id = docSnap.id;
+      const existing = activityMap.get(id);
+      activityMap.set(id, {
+        ...(existing || {}),
         ...data,
-        activityId: docSnap.id,
+        activityId: id,
         computedStatus: computeActivityStatus(data)
       });
     });
-
-    if (firestoreActivities.length > 0) {
-      return firestoreActivities;
-    }
   } catch (err) {
     console.warn("Firestore getAdminActivities notice:", err.message);
   }
 
-  return activities;
+  return Array.from(activityMap.values());
+};
+
+/**
+ * Real-time subscription to activities created by the current Admin
+ * @param {string} adminUid 
+ * @param {function(Array): void} callback 
+ * @returns {function(): void} unsubscribe
+ */
+export const subscribeAdminActivities = (adminUid, callback) => {
+  if (!adminUid) return () => {};
+
+  try {
+    const q = query(collection(db, 'activities'), where('adminUid', '==', adminUid));
+    return onSnapshot(
+      q,
+      (snapshot) => {
+        const activityMap = new Map();
+        const localKeys = Object.keys(localStorage).filter((k) => k.startsWith('quizora_activity_'));
+
+        localKeys.forEach((key) => {
+          try {
+            const item = JSON.parse(localStorage.getItem(key) || '{}');
+            if (item.adminUid === adminUid && item.activityId) {
+              activityMap.set(item.activityId, {
+                ...item,
+                computedStatus: computeActivityStatus(item)
+              });
+            }
+          } catch {
+            // Ignore
+          }
+        });
+
+        snapshot.forEach((docSnap) => {
+          const data = docSnap.data();
+          const id = docSnap.id;
+          const existing = activityMap.get(id);
+          activityMap.set(id, {
+            ...(existing || {}),
+            ...data,
+            activityId: id,
+            computedStatus: computeActivityStatus(data)
+          });
+        });
+
+        callback(Array.from(activityMap.values()));
+      },
+      (err) => {
+        console.warn("Firestore subscribeAdminActivities notice:", err.message);
+      }
+    );
+  } catch (err) {
+    console.warn("Firestore subscribeAdminActivities setup error:", err.message);
+    return () => {};
+  }
 };
 
 /**

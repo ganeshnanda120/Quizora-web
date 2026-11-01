@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { getValidParticipantFields, isParticipantFormValid } from '../../utils/participantFormUtils';
 
 const COMMON_PRESETS = [
   'Name',
@@ -18,6 +19,7 @@ export default function Step4ParticipantForm({
   onBack,
   onResetQuestions,
   saving,
+  publishingError = '',
   isEditMode = false
 }) {
   const [error, setError] = useState('');
@@ -36,9 +38,31 @@ export default function Step4ParticipantForm({
   const [deleteTargetIndex, setDeleteTargetIndex] = useState(null);
 
   // All fields start with isOptional: false (unchecked) by default
-  const participantFields = formData.participantForm || [
-    { id: 'field_name', label: 'Name', isOptional: false, required: true }
-  ];
+  const participantFields = Array.isArray(formData?.participantForm)
+    ? formData.participantForm
+    : [
+        { id: 'field_name', label: 'Name', isOptional: false, required: true }
+      ];
+
+  // Reorder field up in the list
+  const handleMoveUp = (index) => {
+    if (index <= 0) return;
+    setError('');
+    const updated = [...participantFields];
+    const [moved] = updated.splice(index, 1);
+    updated.splice(index - 1, 0, moved);
+    updateFormData({ participantForm: updated });
+  };
+
+  // Reorder field down in the list
+  const handleMoveDown = (index) => {
+    if (index >= participantFields.length - 1) return;
+    setError('');
+    const updated = [...participantFields];
+    const [moved] = updated.splice(index, 1);
+    updated.splice(index + 1, 0, moved);
+    updateFormData({ participantForm: updated });
+  };
 
   const handleToggleOptional = (index, isOptional) => {
     setError('');
@@ -170,9 +194,12 @@ export default function Step4ParticipantForm({
     e.preventDefault();
     setError('');
 
-    // Check if form has at least one field
-    if (participantFields.length === 0) {
-      setError('At least one participant form field is required to proceed.');
+    const validFields = getValidParticipantFields(participantFields);
+    const isValid = isParticipantFormValid(participantFields);
+
+    // Block navigation ONLY when total number of selected participant fields is zero
+    if (!isValid) {
+      setError('Please select at least one participant field to continue.');
       return;
     }
 
@@ -183,7 +210,10 @@ export default function Step4ParticipantForm({
       return;
     }
 
-    onNext();
+    onNext({
+      ...formData,
+      participantForm: validFields
+    });
   };
 
   const targetFieldToDelete = deleteTargetIndex !== null ? participantFields[deleteTargetIndex] : null;
@@ -346,14 +376,14 @@ export default function Step4ParticipantForm({
         </button>
       </div>
 
-      {error && (
+      {(error || publishingError) && (
         <div className="alert alert-error mb-4">
           <svg className="alert-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
             <circle cx="12" cy="12" r="10" />
             <line x1="12" y1="8" x2="12" y2="12" />
             <line x1="12" y1="16" x2="12.01" y2="16" />
           </svg>
-          <span>{error}</span>
+          <span>{error || publishingError}</span>
         </div>
       )}
 
@@ -443,6 +473,32 @@ export default function Step4ParticipantForm({
                     </span>
                   </label>
 
+                  {/* Reorder Buttons */}
+                  <button
+                    type="button"
+                    className="btn-reorder-field-icon"
+                    onClick={() => handleMoveUp(index)}
+                    disabled={index === 0}
+                    title="Move Up"
+                    aria-label={`Move ${field.label} up`}
+                  >
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                      <polyline points="18 15 12 9 6 15" />
+                    </svg>
+                  </button>
+                  <button
+                    type="button"
+                    className="btn-reorder-field-icon"
+                    onClick={() => handleMoveDown(index)}
+                    disabled={index === participantFields.length - 1}
+                    title="Move Down"
+                    aria-label={`Move ${field.label} down`}
+                  >
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                      <polyline points="6 9 12 15 18 9" />
+                    </svg>
+                  </button>
+
                   {/* Edit button for custom added fields */}
                   {field.isCustom && (
                     <button
@@ -499,7 +555,7 @@ export default function Step4ParticipantForm({
               <span>{isEditMode ? 'Saving Changes...' : 'Finalizing Activity...'}</span>
             </div>
           ) : (
-            <span>{isEditMode ? 'Save Changes & Update Activity' : 'Complete & Generate Link \u2192'}</span>
+            <span>{isEditMode ? 'Save Changes & Update Activity' : 'Continue to Share Link \u2192'}</span>
           )}
         </button>
       </div>

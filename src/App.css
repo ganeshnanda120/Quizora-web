@@ -3443,6 +3443,33 @@ input[type="number"] {
   transform: translateY(-1px);
 }
 
+.btn-reorder-field-icon {
+  width: 32px;
+  height: 32px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid #e2e8f0;
+  background: #f8fafc;
+  color: #64748b;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  padding: 0;
+}
+
+.btn-reorder-field-icon:hover:not(:disabled) {
+  background: #f1f5f9;
+  color: #0f172a;
+  border-color: #cbd5e1;
+  transform: translateY(-1px);
+}
+
+.btn-reorder-field-icon:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+
 .btn-delete-field-icon {
   width: 32px;
   height: 32px;
@@ -7996,6 +8023,78 @@ img, video, canvas, svg {
   align-items: center !important;
   gap: 8px !important;
   box-shadow: 0 2px 8px rgba(239, 68, 68, 0.12) !important;
+}
+
+.status-badge-pill-password {
+  background: #f5f3ff !important;
+  color: #5b21b6 !important;
+  border: 1px solid #ddd6fe !important;
+  padding: 7px 18px !important;
+  border-radius: 9999px !important;
+  font-size: 0.82rem !important;
+  font-weight: 800 !important;
+  letter-spacing: 0.04em !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 8px !important;
+  box-shadow: 0 2px 8px rgba(124, 58, 237, 0.15) !important;
+}
+
+.password-icon-box {
+  width: 68px;
+  height: 68px;
+  border-radius: 50%;
+  background: rgba(99, 102, 241, 0.1);
+  border: 2px solid rgba(99, 102, 241, 0.25);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0 auto 16px auto;
+  color: #6366f1;
+}
+
+.password-input-wrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+  width: 100%;
+}
+
+.password-input-wrapper .password-input {
+  width: 100%;
+  padding-right: 44px;
+}
+
+.password-input-wrapper .toggle-password-btn {
+  position: absolute;
+  right: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  background: none;
+  border: none;
+  padding: 6px;
+  cursor: pointer;
+  color: #64748b;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 6px;
+}
+
+.password-input-wrapper .toggle-password-btn:hover {
+  color: #1e293b;
+  background: rgba(0, 0, 0, 0.05);
+}
+
+.password-error-message {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 8px;
+  color: #dc2626;
+  font-size: 0.85rem;
+  font-weight: 600;
+  text-align: left;
 }
 
 .access-status-message {

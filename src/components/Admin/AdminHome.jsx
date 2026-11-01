@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
-import { getAdminActivities, getAdminSubmissions, duplicateAdminActivity, deleteAdminActivity } from '../../services/adminService';
+import { getAdminActivities, getAdminSubmissions, duplicateAdminActivity, deleteAdminActivity, subscribeAdminActivities } from '../../services/adminService';
 import SubmissionsList from './SubmissionsList';
 
 export default function AdminHome({
@@ -79,13 +79,25 @@ export default function AdminHome({
 
   useEffect(() => {
     let active = true;
+    let unsubscribe = () => {};
+
     if (user?.uid) {
       Promise.resolve().then(() => {
         if (active) loadData();
       });
+
+      unsubscribe = subscribeAdminActivities(user.uid, (realtimeActs) => {
+        if (active) {
+          const ownActivities = (realtimeActs || []).filter((a) => a.adminUid === user.uid);
+          setActivities(ownActivities);
+          setLoading(false);
+        }
+      });
     }
+
     return () => {
       active = false;
+      unsubscribe();
     };
   }, [user, loadData]);
 

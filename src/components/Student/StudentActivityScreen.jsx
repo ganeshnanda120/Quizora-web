@@ -17,6 +17,30 @@ export default function StudentActivityScreen({
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
 
+  // Password verification state
+  const isSessionVerified = useMemo(() => {
+    try {
+      return sessionStorage.getItem(`taskgrade_pwd_verified_${activityId}`) === 'true';
+    } catch {
+      return false;
+    }
+  }, [activityId]);
+
+  const [verifiedActivityId, setVerifiedActivityId] = useState(null);
+  const isPasswordVerified = (verifiedActivityId === activityId) || isSessionVerified;
+
+  const [passwordInput, setPasswordInput] = useState('');
+  const [passwordError, setPasswordError] = useState('');
+  const [verifyingPassword, setVerifyingPassword] = useState(false);
+  const [showPasswordText, setShowPasswordText] = useState(false);
+
+  const hasPasswordProtection = useMemo(() => {
+    if (!activity) return false;
+    return Boolean(activity.password && String(activity.password).trim().length > 0);
+  }, [activity]);
+
+  const requiresPasswordVerification = hasPasswordProtection && !isPasswordVerified;
+
   const normalizedData = useMemo(() => normalizeActivityQuestions(activity), [activity]);
 
   // Screen Flow States: 'landing' | 'participant_form' | 'attending' | 'submitted' | 'expired_notice'
@@ -68,6 +92,10 @@ export default function StudentActivityScreen({
   useEffect(() => {
     let isMounted = true;
 
+    if (import.meta.env.DEV) {
+      console.log(`[Task Grade Participant] Opening activity link. Activity ID: ${activityId}`);
+    }
+
     const loadActivity = async () => {
       if (!activityId) {
         if (isMounted) {
@@ -83,8 +111,15 @@ export default function StudentActivityScreen({
         if (!isMounted) return;
 
         if (!data) {
+          if (import.meta.env.DEV) {
+            console.log(`[Task Grade Participant] Activity config fetched. Activity ID: ${activityId}, Loaded: false, Password configured: false`);
+          }
           setNotFound(true);
         } else {
+          const isPwd = Boolean(data.password && String(data.password).trim().length > 0);
+          if (import.meta.env.DEV) {
+            console.log(`[Task Grade Participant] Activity config fetched. Activity ID: ${activityId}, Loaded: true, Password configured: ${isPwd}`);
+          }
           setActivity(data);
           setNotFound(false);
         }
@@ -102,6 +137,13 @@ export default function StudentActivityScreen({
       isMounted = false;
     };
   }, [activityId]);
+
+  // Log password protection check
+  useEffect(() => {
+    if (!loading && activity && import.meta.env.DEV) {
+      console.log(`[Task Grade Participant] Password protection check. Activity ID: ${activityId}, Password required: ${hasPasswordProtection}, Verified in session: ${isPasswordVerified}`);
+    }
+  }, [loading, activity, activityId, hasPasswordProtection, isPasswordVerified]);
 
   // Compute absolute start & end timestamps in epoch ms
   const startMs = useMemo(() => {
@@ -181,6 +223,10 @@ export default function StudentActivityScreen({
 
   // Validate Participant Form and Start Exam
   const handleStartExamFlow = () => {
+    if (requiresPasswordVerification) {
+      return;
+    }
+
     const participantConfig = activity?.participantForm || [];
 
     if (participantConfig.length === 0) {
@@ -244,6 +290,55 @@ export default function StudentActivityScreen({
     setScreenFlow('expired_notice');
   }, []);
 
+  // Handle password verification submit
+  const handleVerifyPassword = (e) => {
+    if (e) e.preventDefault();
+    setPasswordError('');
+
+    const entered = passwordInput.trim();
+    const configured = String(activity?.password || '').trim();
+
+    if (!entered) {
+      setPasswordError('Please enter the activity password.');
+      return;
+    }
+
+    setVerifyingPassword(true);
+
+    if (entered === configured) {
+      if (import.meta.env.DEV) {
+        console.log(`[Task Grade Participant] Password verification result. Activity ID: ${activityId}, Status: SUCCEEDED`);
+      }
+      try {
+        sessionStorage.setItem(`taskgrade_pwd_verified_${activityId}`, 'true');
+      } catch {
+        // Ignore quota error
+      }
+      setVerifiedActivityId(activityId);
+      setVerifyingPassword(false);
+    } else {
+      if (import.meta.env.DEV) {
+        console.log(`[Task Grade Participant] Password verification result. Activity ID: ${activityId}, Status: FAILED`);
+      }
+      setPasswordError('Incorrect activity password. Please try again.');
+      setVerifyingPassword(false);
+    }
+  };
+
+  // Log active joining-flow screen navigation
+  useEffect(() => {
+    if (!loading && activity && !requiresPasswordVerification && import.meta.env.DEV) {
+      let step = 'unknown';
+      if (screenFlow === 'submitted') step = 'submitted';
+      else if (screenFlow === 'expired_notice' || activityStatus === 'EXPIRED') step = 'expired_notice';
+      else if (screenFlow === 'attending') step = 'attending';
+      else if (screenFlow === 'participant_form') step = 'participant_form';
+      else if (activityStatus === 'NOT_STARTED') step = 'countdown';
+      else if (activityStatus === 'ACTIVE') step = 'active';
+      console.log(`[Task Grade Participant] Navigating to screen. Activity ID: ${activityId}, Step: ${step}`);
+    }
+  }, [loading, activity, requiresPasswordVerification, screenFlow, activityStatus, activityId]);
+
   // 1. Loading State
   if (loading) {
     return (
@@ -297,7 +392,137 @@ export default function StudentActivityScreen({
     );
   }
 
-  // 3. Submitted Success Screen
+  // 3. Password Verification Screen (Mandatory before countdown or joining flow)
+  if (requiresPasswordVerification) {
+    return (
+      <div className="student-access-viewport fade-in">
+        <div className="student-access-container">
+          <div className="access-brand-header text-center mb-6">
+            <img src={logoImg} alt="Task Grade" className="access-brand-logo" />
+            <h2 className="access-brand-title">Task Grade</h2>
+          </div>
+
+          <div className="access-status-card bg-white p-8 rounded-2xl shadow-lg border border-slate-100 text-center">
+            {/* Password Protected Badge */}
+            <div className="status-badge-header mb-4">
+              <span className="status-badge-pill-password">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+                  <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+                </svg>
+                <span>PASSWORD PROTECTED</span>
+              </span>
+            </div>
+
+            {/* Lock Icon */}
+            <div className="password-icon-box">
+              <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+                <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+                <circle cx="12" cy="16" r="1" />
+              </svg>
+            </div>
+
+            {/* Activity Info */}
+            <div className="activity-info-box">
+              <span className="activity-purpose-label">
+                {activity.purpose || 'Exam'}
+              </span>
+              <h2 className="activity-title-headline">
+                {activity.title}
+              </h2>
+              {activity.subject && (
+                <span className="activity-subject-badge">
+                  Subject: {activity.subject}
+                </span>
+              )}
+            </div>
+
+            <p className="access-status-message">
+              This activity requires a password to participate. Please enter the password provided by your exam coordinator or instructor.
+            </p>
+
+            {/* Password Verification Form */}
+            <form onSubmit={handleVerifyPassword} className="password-verify-form" noValidate>
+              <div className="form-group mb-4 text-left">
+                <label className="form-label font-semibold text-sm mb-1 block" htmlFor="activity-password-input">
+                  Activity Password <span className="text-danger">*</span>
+                </label>
+                <div className="password-input-wrapper">
+                  <input
+                    type={showPasswordText ? "text" : "password"}
+                    id="activity-password-input"
+                    className={`form-input password-input ${passwordError ? 'input-error' : ''}`}
+                    placeholder="Enter activity password..."
+                    value={passwordInput}
+                    onChange={(e) => {
+                      setPasswordInput(e.target.value);
+                      if (passwordError) setPasswordError('');
+                    }}
+                    autoFocus
+                    autoComplete="off"
+                  />
+                  <button
+                    type="button"
+                    className="toggle-password-btn"
+                    onClick={() => setShowPasswordText(!showPasswordText)}
+                    aria-label={showPasswordText ? "Hide password" : "Show password"}
+                  >
+                    {showPasswordText ? (
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="18" height="18">
+                        <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24" />
+                        <line x1="1" y1="1" x2="23" y2="23" />
+                      </svg>
+                    ) : (
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="18" height="18">
+                        <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+                        <circle cx="12" cy="12" r="3" />
+                      </svg>
+                    )}
+                  </button>
+                </div>
+                {passwordError && (
+                  <div className="password-error-message">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <circle cx="12" cy="12" r="10" />
+                      <line x1="12" y1="8" x2="12" y2="12" />
+                      <line x1="12" y1="16" x2="12.01" y2="16" />
+                    </svg>
+                    <span>{passwordError}</span>
+                  </div>
+                )}
+              </div>
+
+              <button
+                type="submit"
+                className="btn-start-active w-full"
+                disabled={verifyingPassword}
+              >
+                <span>{verifyingPassword ? 'Verifying...' : 'Verify & Continue'}</span>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <line x1="5" y1="12" x2="19" y2="12" />
+                  <polyline points="12 5 19 12 12 19" />
+                </svg>
+              </button>
+            </form>
+
+            <button
+              type="button"
+              className="btn btn-secondary btn-sm mt-4 w-full"
+              onClick={() => {
+                if (onNavigateHome) onNavigateHome();
+                else window.location.href = '/';
+              }}
+            >
+              Cancel &amp; Return Home
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // 4. Submitted Success Screen
   if (screenFlow === 'submitted' && submittedData) {
     return (
       <StudentSubmissionResult

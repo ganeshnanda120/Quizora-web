@@ -1,9 +1,44 @@
+import { useState } from 'react';
 import { useRouter } from '../router';
 import { getUserRole } from '../services/permissionService';
+import { saveUserProfile } from '../services/userService';
 
-export default function AccessDenied({ user, profileData, requiredRole, requiredPermission, onLogout }) {
+export default function AccessDenied({ user, profileData, requiredRole, requiredPermission, onLogout, onProfileUpdated }) {
   const { navigate } = useRouter();
   const currentRole = getUserRole(profileData, user);
+  const [switching, setSwitching] = useState(false);
+
+  const handleSwitchToAdmin = async () => {
+    setSwitching(true);
+    try {
+      const updatedProfile = {
+        ...(profileData || {}),
+        uid: user?.uid,
+        email: user?.email,
+        role: 'admin',
+        isAdmin: true,
+        isStudent: false,
+        isMainAdmin: true
+      };
+      try {
+        localStorage.setItem('taskgrade_role_override', 'main_admin');
+      } catch {
+        // ignore
+      }
+      if (user?.uid) {
+        await saveUserProfile(user.uid, updatedProfile);
+      }
+      if (onProfileUpdated) {
+        onProfileUpdated(updatedProfile);
+      }
+      navigate('/admin');
+    } catch (err) {
+      console.error("Error switching to admin role:", err);
+      navigate('/admin');
+    } finally {
+      setSwitching(false);
+    }
+  };
 
   return (
     <div className="app-viewport">
@@ -103,13 +138,39 @@ export default function AccessDenied({ user, profileData, requiredRole, required
               type="button"
               className="btn btn-primary"
               style={{ width: '100%', justifyContent: 'center' }}
+              onClick={handleSwitchToAdmin}
+              disabled={switching}
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="18" height="18">
+                <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+              </svg>
+              <span>{switching ? 'Activating Admin Access...' : 'Switch Role to Admin & Continue'}</span>
+            </button>
+
+            <button
+              type="button"
+              className="btn btn-secondary"
+              style={{ width: '100%', justifyContent: 'center' }}
+              onClick={() => navigate('/profile/edit')}
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="18" height="18">
+                <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+                <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+              </svg>
+              <span>Edit Profile & Role</span>
+            </button>
+
+            <button
+              type="button"
+              className="btn btn-secondary"
+              style={{ width: '100%', justifyContent: 'center' }}
               onClick={() => navigate('/dashboard')}
             >
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="18" height="18">
                 <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
                 <polyline points="9 22 9 12 15 12 15 22" />
               </svg>
-              <span>Return to Dashboard</span>
+              <span>Return to User Dashboard</span>
             </button>
 
             {onLogout && (

@@ -278,6 +278,7 @@ function AppContent() {
           requiredPermission={accessCheck.requiredPermission}
           reason={accessCheck.reason}
           onLogout={handleLogout}
+          onProfileUpdated={handleProfileUpdated}
         />
       );
     }

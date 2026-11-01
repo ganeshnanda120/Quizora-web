@@ -628,13 +628,6 @@ export default function Dashboard({ user, profileData, onProfileUpdated }) {
             setEditingActivity(null);
             navigate('/admin');
           }}
-          onActivityCreated={() => {
-            navigate('/admin');
-          }}
-          onActivityUpdated={() => {
-            setEditingActivity(null);
-            navigate('/admin');
-          }}
         />
       )}
 

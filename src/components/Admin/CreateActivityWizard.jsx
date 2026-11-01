@@ -4,21 +4,21 @@ import Step3QuestionsSetup from './Step3QuestionsSetup';
 import Step4ParticipantForm from './Step4ParticipantForm';
 import Step5FinalizeShare from './Step5FinalizeShare';
 import { generateActivityId, saveActivityDraft, publishActivity, updateExistingActivity } from '../../services/activityService';
+import { getValidParticipantFields, isParticipantFormValid } from '../../utils/participantFormUtils';
 import logoImg from '../../assets/logo.png';
 
 export default function CreateActivityWizard({
   user,
   profileData,
   onClose,
-  onActivityCreated,
-  initialActivity = null,
-  onActivityUpdated = null
+  initialActivity = null
 }) {
   const isEditMode = Boolean(initialActivity);
 
   // Starts directly at Basic Info (Step 1 of creation wizard)
   const [currentStep, setCurrentStep] = useState(1);
   const [saving, setSaving] = useState(false);
+  const [publishingError, setPublishingError] = useState('');
   const [activityId] = useState(() => initialActivity?.activityId || generateActivityId());
   const [publishedUrl, setPublishedUrl] = useState(() => {
     if (initialActivity?.shareUrl) return initialActivity.shareUrl;
@@ -159,6 +159,9 @@ export default function CreateActivityWizard({
   // Step 1 (Basic Info) -> Step 2 (Questions): Save draft or in-place update
   const handleStep1Next = async (customData) => {
     const payload = (customData && typeof customData === 'object' && !customData.nativeEvent) ? customData : formDataRef.current;
+    if (import.meta.env.DEV) {
+      console.log(`[Task Grade Admin] Basic Info submitted. Activity ID: ${activityId}, Password configured: ${Boolean(payload?.password && String(payload.password).trim().length > 0)}`);
+    }
     setSaving(true);
     try {
       if (isEditMode) {
@@ -196,26 +199,45 @@ export default function CreateActivityWizard({
 
   // Step 3 (Participant Form) -> Step 4 (Share Link): Finalize and Save / Publish
   const handleStep3Complete = async (customData) => {
-    const payload = (customData && typeof customData === 'object' && !customData.nativeEvent) ? customData : formDataRef.current;
+    if (saving) return; // Prevent duplicate creation on double click
+    setPublishingError('');
+
+    const rawPayload = (customData && typeof customData === 'object' && !customData.nativeEvent) ? customData : formDataRef.current;
+    
+    // Core validation: at least 1 valid participant field required
+    const validFields = getValidParticipantFields(rawPayload?.participantForm);
+    if (!isParticipantFormValid(validFields)) {
+      // Remain on Participant Form step without redirecting
+      return;
+    }
+
+    const payloadToPersist = {
+      ...rawPayload,
+      participantForm: validFields
+    };
+
     setSaving(true);
     try {
+      let finalPermanentUrl = publishedUrl;
+
       if (isEditMode) {
-        const updatedPayload = await updateExistingActivity(activityId, payload, user, profileData);
-        setPublishedUrl(updatedPayload.shareUrl || publishedUrl);
-        if (onActivityUpdated) {
-          onActivityUpdated(updatedPayload);
-        }
+        const updatedPayload = await updateExistingActivity(activityId, payloadToPersist, user, profileData);
+        finalPermanentUrl = updatedPayload.shareUrl || publishedUrl;
+        setPublishedUrl(finalPermanentUrl);
       } else {
-        const publishedPayload = await publishActivity(activityId, payload);
-        setPublishedUrl(publishedPayload.shareUrl);
-        if (onActivityCreated) {
-          onActivityCreated(publishedPayload);
-        }
+        const publishedPayload = await publishActivity(activityId, payloadToPersist);
+        finalPermanentUrl = publishedPayload.shareUrl || `${window.location.origin}/activity/${activityId}`;
+        setPublishedUrl(finalPermanentUrl);
       }
+
+      updateFormData({ ...payloadToPersist, shareUrl: finalPermanentUrl });
+
+      // Navigate directly to Step 4 (Share Link) within the wizard
       window.history.pushState({ wizardStep: 4, wizardOpen: true }, '', window.location.href);
       setCurrentStep(4);
     } catch (err) {
       console.error("Publish/Update activity error:", err);
+      setPublishingError(err.message || 'Failed to publish activity. Please try again.');
     } finally {
       setSaving(false);
     }
@@ -391,6 +413,7 @@ export default function CreateActivityWizard({
               onBack={() => setCurrentStep(2)}
               onResetQuestions={handleResetQuestionsAndGoToStep1}
               saving={saving}
+              publishingError={publishingError}
               isEditMode={isEditMode}
             />
           )}

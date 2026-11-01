@@ -213,7 +213,9 @@ export const saveActivityDraft = async (activityId, activityData) => {
   try {
     const docRef = doc(db, 'activities', activityId);
     await setDoc(docRef, payload, { merge: true });
-    console.log(`[Task Grade] Activity draft successfully persisted to Firestore: ${activityId}`);
+    if (import.meta.env.DEV) {
+      console.log(`[Task Grade Firebase] Activity draft saved. Activity ID: ${activityId}, Password configured: ${Boolean(payload?.password && String(payload.password).trim().length > 0)}`);
+    }
   } catch (err) {
     console.warn("Firestore activity draft write notice:", err.message);
     if (err.message && err.message.includes('exceeds the maximum allowed size')) {
@@ -267,7 +269,9 @@ export const publishActivity = async (activityId, fullPayload) => {
   try {
     const docRef = doc(db, 'activities', activityId);
     await setDoc(docRef, finalPayload, { merge: true });
-    console.log(`[Task Grade] Activity successfully published to Firestore: ${activityId}`);
+    if (import.meta.env.DEV) {
+      console.log(`[Task Grade Firebase] Activity published. Activity ID: ${activityId}, Password configured: ${Boolean(finalPayload?.password && String(finalPayload.password).trim().length > 0)}`);
+    }
   } catch (err) {
     console.warn("Firestore activity publish write notice:", err.message);
     if (err.message && err.message.includes('exceeds the maximum allowed size')) {
@@ -349,7 +353,9 @@ export const updateExistingActivity = async (activityId, updatedData, user, prof
   try {
     const docRef = doc(db, 'activities', activityId);
     await setDoc(docRef, finalPayload, { merge: true });
-    console.log(`[Task Grade] Activity ${activityId} successfully updated with merge: true.`);
+    if (import.meta.env.DEV) {
+      console.log(`[Task Grade Firebase] Activity updated. Activity ID: ${activityId}, Password configured: ${Boolean(finalPayload?.password && String(finalPayload.password).trim().length > 0)}`);
+    }
   } catch (err) {
     console.warn("Firestore activity update notice:", err.message);
     if (err.message && err.message.includes('exceeds the maximum allowed size')) {
@@ -396,7 +402,13 @@ export const getActivityById = async (activityId) => {
     const docRef = doc(db, 'activities', activityId);
     const snap = await getDoc(docRef);
     if (snap.exists()) {
-      return { activityId, ...snap.data() };
+      const freshData = { activityId, ...snap.data() };
+      try {
+        localStorage.setItem(`quizora_activity_${activityId}`, JSON.stringify(freshData));
+      } catch {
+        // Ignore quota error
+      }
+      return freshData;
     }
     return localData;
   } catch (err) {
