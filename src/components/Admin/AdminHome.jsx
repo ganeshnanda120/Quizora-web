@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { getAdminActivities, getAdminSubmissions, duplicateAdminActivity, deleteAdminActivity, subscribeAdminActivities } from '../../services/adminService';
+import { sortNewestFirst } from '../../utils/timeUtils';
 import SubmissionsList from './SubmissionsList';
 
 export default function AdminHome({
@@ -231,8 +232,12 @@ export default function AdminHome({
     return true;
   };
 
-  const activeActivities = activities.filter((act) => isActivityActive(act) && filterActivityItem(act));
-  const completedActivities = activities.filter((act) => !isActivityActive(act) && isActivityCompleted(act) && filterActivityItem(act));
+  const sortedActivities = useMemo(() => {
+    return sortNewestFirst(activities);
+  }, [activities]);
+
+  const activeActivities = sortedActivities.filter((act) => isActivityActive(act) && filterActivityItem(act));
+  const completedActivities = sortedActivities.filter((act) => !isActivityActive(act) && isActivityCompleted(act) && filterActivityItem(act));
 
   // Compute stats for a single activity
   const getSubmissionsForActivity = (activityId) => {

@@ -7,9 +7,13 @@ import {
   sendPasswordResetEmail 
 } from 'firebase/auth';
 import { auth } from '../../firebase';
+import { useRouter, getSafeRedirectUrl } from '../../router';
 import logoImg from '../../assets/logo.png';
 
 export default function Login({ onNavigate }) {
+  const { query } = useRouter();
+  const safeRedirect = getSafeRedirectUrl(query?.redirect) || getSafeRedirectUrl(sessionStorage.getItem('quizora_redirect_after_auth'));
+
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -158,6 +162,15 @@ export default function Login({ onNavigate }) {
             : "Sign in to access your assessments & dashboard"}
         </p>
       </div>
+
+      {safeRedirect && safeRedirect.startsWith('/activity/') && !resetMode && (
+        <div className="alert alert-info" role="status" style={{ marginBottom: '1.25rem', padding: '10px 14px', borderRadius: '8px', fontSize: '13px', background: 'rgba(59, 130, 246, 0.08)', border: '1px solid rgba(59, 130, 246, 0.25)', color: '#1d4ed8', display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+          </svg>
+          <span>Sign in required to participate in this activity.</span>
+        </div>
+      )}
 
       {error && (
         <div className="alert alert-error" role="alert">
@@ -369,7 +382,13 @@ export default function Login({ onNavigate }) {
               <button
                 type="button"
                 className="link-button highlight"
-                onClick={() => onNavigate('register')}
+                onClick={() => {
+                  if (safeRedirect) {
+                    onNavigate(`/register?redirect=${encodeURIComponent(safeRedirect)}`);
+                  } else {
+                    onNavigate('register');
+                  }
+                }}
                 disabled={loading || googleLoading}
               >
                 Create account

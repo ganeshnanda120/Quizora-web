@@ -3,7 +3,7 @@ import { onAuthStateChanged, getRedirectResult, signOut } from 'firebase/auth';
 import { auth } from './firebase';
 import { getUserProfile, checkIsProfileComplete, subscribeUserProfile } from './services/userService';
 import { canAccessRoute } from './services/permissionService';
-import { RouterProvider, useRouter, matchRoute } from './router';
+import { RouterProvider, useRouter, matchRoute, getSafeRedirectUrl } from './router';
 import Login from './components/Auth/Login';
 import Register from './components/Auth/Register';
 import VerifyEmail from './components/Auth/VerifyEmail';
@@ -54,7 +54,7 @@ const isKnownDashboardRoute = (path) => {
 };
 
 function AppContent() {
-  const { currentPath, navigate } = useRouter();
+  const { currentPath, currentSearch, query, navigate } = useRouter();
 
   const [user, setUser] = useState(null);
   const [profileData, setProfileData] = useState(null);
@@ -132,12 +132,17 @@ function AppContent() {
     if (authLoading || profileLoading) return;
 
     if (!user) {
-      // If user is unauthenticated and attempting to visit a private route, redirect to /login
-      if (currentPath !== '/login' && currentPath !== '/register' && !currentPath.startsWith('/activity/')) {
+      // If user is unauthenticated and attempting to visit a private route or shared activity link, redirect to /login
+      if (currentPath !== '/login' && currentPath !== '/register') {
+        const fullTarget = `${currentPath}${currentSearch ? currentSearch : ''}`;
         if (currentPath !== '/') {
-          sessionStorage.setItem('quizora_redirect_after_auth', currentPath);
+          sessionStorage.setItem('quizora_redirect_after_auth', fullTarget);
         }
-        navigate('/login', { replace: true });
+        if (currentPath.startsWith('/activity/')) {
+          navigate(`/login?redirect=${encodeURIComponent(fullTarget)}`, { replace: true });
+        } else {
+          navigate('/login', { replace: true });
+        }
       }
       return;
     }
@@ -160,15 +165,18 @@ function AppContent() {
     // User is fully authenticated, verified, and profile complete.
     // Redirect away from entry/auth pages to intended destination or /dashboard
     if (['/login', '/register', '/verify-email', '/complete-profile', '/'].includes(currentPath)) {
-      const redirectTarget = sessionStorage.getItem('quizora_redirect_after_auth');
-      if (redirectTarget && redirectTarget !== '/login' && redirectTarget !== '/') {
+      const queryRedirect = query?.redirect ? decodeURIComponent(query.redirect) : null;
+      const sessionRedirect = sessionStorage.getItem('quizora_redirect_after_auth');
+      const safeTarget = getSafeRedirectUrl(queryRedirect) || getSafeRedirectUrl(sessionRedirect);
+
+      if (safeTarget) {
         sessionStorage.removeItem('quizora_redirect_after_auth');
-        navigate(redirectTarget, { replace: true });
+        navigate(safeTarget, { replace: true });
       } else {
         navigate('/dashboard', { replace: true });
       }
     }
-  }, [user, profileData, authLoading, profileLoading, currentPath, navigate]);
+  }, [user, profileData, authLoading, profileLoading, currentPath, currentSearch, query, navigate]);
 
   const handleLogout = useCallback(async () => {
     try {
@@ -191,14 +199,17 @@ function AppContent() {
   // Callback when user completes profile setup
   const handleProfileCompleted = useCallback((newProfileData) => {
     setProfileData(newProfileData);
-    const redirectTarget = sessionStorage.getItem('quizora_redirect_after_auth');
-    if (redirectTarget && redirectTarget !== '/login' && redirectTarget !== '/') {
+    const queryRedirect = query?.redirect ? decodeURIComponent(query.redirect) : null;
+    const sessionRedirect = sessionStorage.getItem('quizora_redirect_after_auth');
+    const safeTarget = getSafeRedirectUrl(queryRedirect) || getSafeRedirectUrl(sessionRedirect);
+
+    if (safeTarget) {
       sessionStorage.removeItem('quizora_redirect_after_auth');
-      navigate(redirectTarget);
+      navigate(safeTarget);
     } else {
       navigate('/dashboard');
     }
-  }, [navigate]);
+  }, [query, navigate]);
 
   // Callback when user updates profile from dashboard modal
   const handleProfileUpdated = useCallback((updatedProfileData) => {
@@ -218,15 +229,27 @@ function AppContent() {
     );
   }
 
-  // 2. Direct Activity Link view controller (Student / Guest taking an activity)
+  // 2. Direct Activity Link view controller (Student / Participant taking an activity)
   if (currentPath.startsWith('/activity/')) {
+    if (!user) {
+      return (
+        <div className="full-page-loader">
+          <div className="loader-brand">
+            <img src={logoImg} alt="Task Grade" className="loader-logo" />
+          </div>
+          <div className="spinner large"></div>
+          <p>Authentication required. Redirecting to sign in...</p>
+        </div>
+      );
+    }
+
     const activityId = currentPath.replace('/activity/', '').split('?')[0].split('/')[0];
     return (
       <StudentActivityScreen
         activityId={activityId}
         user={user}
         profileData={profileData}
-        onNavigateHome={() => navigate(user ? '/dashboard' : '/login')}
+        onNavigateHome={() => navigate('/dashboard')}
       />
     );
   }

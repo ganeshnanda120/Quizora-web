@@ -9514,6 +9514,420 @@ img, video, canvas, svg {
   font-weight: 800;
 }
 
+/* ==========================================================================
+   Task Grade — Complete Checking & Evaluation System Styles
+   ========================================================================== */
+
+/* Phase 1: Stats Banner & Filter Pills */
+.evaluation-stats-banner {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 12px;
+}
+
+.eval-stat-card {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.eval-stat-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+}
+
+.eval-stat-card .stat-num {
+  font-size: 1.6rem;
+  font-weight: 800;
+  line-height: 1.1;
+  color: #0f172a;
+}
+
+.eval-stat-card .stat-lbl {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: #64748b;
+  margin-top: 4px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.eval-stat-card.card-pending .stat-num { color: #f59e0b; }
+.eval-stat-card.card-partial .stat-num { color: #6366f1; }
+.eval-stat-card.card-completed .stat-num { color: #10b981; }
+.eval-stat-card.card-published .stat-num { color: #0284c7; }
+
+/* Filter Pills */
+.filter-pills-row {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.filter-pill-btn {
+  padding: 6px 14px;
+  border-radius: 9999px;
+  font-size: 0.8rem;
+  font-weight: 700;
+  border: 1px solid #cbd5e1;
+  background: #ffffff;
+  color: #475569;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.filter-pill-btn:hover {
+  background: #f1f5f9;
+  color: #0f172a;
+  border-color: #94a3b8;
+}
+
+.filter-pill-btn.active {
+  background: #4f46e5;
+  color: #ffffff;
+  border-color: #4f46e5;
+  box-shadow: 0 2px 6px rgba(79, 70, 229, 0.25);
+}
+
+/* Evaluation Grid & Cards */
+.submissions-evaluation-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 16px;
+}
+
+.submission-evaluation-card {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 14px;
+  padding: 18px 20px;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.04);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+}
+
+.submission-evaluation-card:hover {
+  border-color: #a5b4fc;
+  box-shadow: 0 6px 16px rgba(79, 70, 229, 0.1);
+  transform: translateY(-2px);
+}
+
+.submission-evaluation-card.card-published-border {
+  border-left: 4px solid #10b981;
+}
+
+.eval-status-pill {
+  font-size: 0.725rem;
+  font-weight: 800;
+  padding: 3px 8px;
+  border-radius: 6px;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.eval-status-pill.badge-pending {
+  background: #fffbeb;
+  color: #b45309;
+  border: 1px solid #fde68a;
+}
+
+.eval-status-pill.badge-partial {
+  background: #eef2ff;
+  color: #4338ca;
+  border: 1px solid #c7d2fe;
+}
+
+.eval-status-pill.badge-completed {
+  background: #ecfdf5;
+  color: #065f46;
+  border: 1px solid #a7f3d0;
+}
+
+.pub-status-pill {
+  font-size: 0.7rem;
+  font-weight: 700;
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+
+.pub-status-pill.pill-published {
+  background: #ecfdf5;
+  color: #047857;
+}
+
+.pub-status-pill.pill-unpublished {
+  background: #f1f5f9;
+  color: #64748b;
+}
+
+/* Phase 2-8: Submission Checker Modal & Workspace */
+.extra-wide-modal {
+  max-width: 1180px !important;
+  width: 95vw !important;
+  height: 92vh !important;
+  display: flex;
+  flex-direction: column;
+}
+
+.checker-top-bar {
+  border-bottom: 1px solid #e2e8f0;
+  padding-bottom: 12px;
+}
+
+.checker-workspace-layout {
+  display: grid;
+  grid-template-columns: 1fr 340px;
+  gap: 20px;
+  flex: 1;
+  overflow: hidden;
+  margin-top: 14px;
+}
+
+@media (max-width: 900px) {
+  .checker-workspace-layout {
+    grid-template-columns: 1fr;
+    overflow-y: auto;
+  }
+}
+
+.checker-main-scroll {
+  overflow-y: auto;
+  padding-right: 12px;
+}
+
+.checker-sidebar-panel {
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+}
+
+/* Question Quick Nav Strip */
+.question-nav-strip {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: #f8fafc;
+  padding: 8px 12px;
+  border-radius: 10px;
+  border: 1px solid #e2e8f0;
+  overflow-x: auto;
+}
+
+.nav-strip-label {
+  font-size: 0.75rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  color: #64748b;
+}
+
+.nav-strip-pills {
+  display: flex;
+  gap: 4px;
+}
+
+.q-nav-pill {
+  padding: 4px 10px;
+  font-size: 0.75rem;
+  font-weight: 700;
+  border-radius: 6px;
+  border: 1px solid #cbd5e1;
+  background: #ffffff;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  transition: all 0.15s ease;
+}
+
+.q-nav-pill.pill-checked {
+  background: #ecfdf5;
+  border-color: #a7f3d0;
+  color: #065f46;
+}
+
+.q-nav-pill.pill-auto {
+  background: #f0fdf4;
+  border-color: #bbf7d0;
+  color: #166534;
+}
+
+.q-nav-pill.pill-pending {
+  background: #fffbeb;
+  border-color: #fde68a;
+  color: #b45309;
+}
+
+.q-nav-pill.active {
+  box-shadow: 0 0 0 2px #4f46e5;
+  border-color: #4f46e5;
+}
+
+/* Question Eval Card */
+.question-eval-card {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  padding: 18px 20px;
+  margin-bottom: 16px;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.03);
+  transition: border-color 0.15s ease;
+}
+
+.question-eval-card.card-checked {
+  border-left: 4px solid #10b981;
+}
+
+.question-eval-card.card-pending {
+  border-left: 4px solid #f59e0b;
+}
+
+.question-eval-card.highlighted-q {
+  border-color: #6366f1;
+  box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.2);
+}
+
+.q-badge-num {
+  font-size: 0.95rem;
+  font-weight: 800;
+  color: #1e1b4b;
+}
+
+.q-marks-pill {
+  font-size: 0.75rem;
+  background: #f1f5f9;
+  padding: 2px 8px;
+  border-radius: 4px;
+  color: #475569;
+}
+
+.auto-grade-pill {
+  background: #eef2ff;
+  color: #4338ca;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 4px;
+  border: 1px solid #c7d2fe;
+}
+
+.q-eval-state.evaluated {
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: #059669;
+}
+
+.q-eval-state.pending {
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: #d97706;
+}
+
+.q-prompt-text {
+  font-size: 0.95rem;
+  line-height: 1.5;
+  color: #1e293b;
+  font-weight: 600;
+  margin: 0;
+}
+
+.student-submitted-box {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  padding: 12px 14px;
+}
+
+.submitted-box-title {
+  font-size: 0.75rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  color: #64748b;
+  letter-spacing: 0.04em;
+  display: block;
+  margin-bottom: 6px;
+}
+
+/* Evaluation Controls Grid */
+.evaluation-controls-grid {
+  display: grid;
+  grid-template-columns: 200px 1fr;
+  gap: 12px;
+  background: #f1f5f9;
+  padding: 12px 14px;
+  border-radius: 10px;
+  border: 1px solid #e2e8f0;
+}
+
+@media (max-width: 600px) {
+  .evaluation-controls-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.marks-input-wrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.marks-num-input {
+  width: 100%;
+  padding-right: 50px;
+  font-weight: 700;
+}
+
+.marks-suffix {
+  position: absolute;
+  right: 12px;
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: #64748b;
+  pointer-events: none;
+}
+
+/* Progress Meter */
+.progress-bar-track {
+  width: 100%;
+  height: 8px;
+  background: #e2e8f0;
+  border-radius: 9999px;
+  overflow: hidden;
+}
+
+.progress-bar-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #6366f1, #10b981);
+  transition: width 0.3s ease;
+}
+
+/* Participant Meta Grid */
+.participant-meta-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 8px;
+}
+
+.meta-pair {
+  font-size: 0.8rem;
+}
+
+.meta-label {
+  color: #64748b;
+  margin-right: 4px;
+}
+
+.meta-value {
+  color: #0f172a;
+}
+
+
 
 
 

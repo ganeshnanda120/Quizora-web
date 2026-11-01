@@ -44,3 +44,41 @@ export const matchRoute = (pattern, pathname) => {
 
   return params;
 };
+
+/**
+ * Validates whether a redirect path is a safe, internal relative URL.
+ * Rejects protocol-relative URLs (//), external URLs (http:, https:), javascript:, etc.
+ * Accepts paths starting with /activity/, /dashboard, /admin, or /profile.
+ * @param {string|null|undefined} rawTarget 
+ * @returns {string|null} Safe relative path or null
+ */
+export const getSafeRedirectUrl = (rawTarget) => {
+  if (!rawTarget || typeof rawTarget !== 'string') return null;
+  const trimmed = rawTarget.trim();
+
+  // Must begin with a single '/' and not '//' or backslashes
+  if (!trimmed.startsWith('/') || trimmed.startsWith('//') || trimmed.includes('\\')) {
+    return null;
+  }
+
+  // Prevent protocol tricks
+  if (/^\/[/\\]/.test(trimmed)) {
+    return null;
+  }
+
+  // Extract path without query/hash for validation
+  const [pathname] = trimmed.split(/[?#]/);
+
+  // Allow internal activity links or dashboard/profile/admin routes
+  if (
+    pathname.startsWith('/activity/') ||
+    pathname.startsWith('/dashboard') ||
+    pathname.startsWith('/admin') ||
+    pathname.startsWith('/profile')
+  ) {
+    return trimmed;
+  }
+
+  return null;
+};
+

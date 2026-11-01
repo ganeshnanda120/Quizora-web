@@ -1,4 +1,6 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
+import { collection, query, where, getDocs } from 'firebase/firestore';
+import { db } from '../../firebase';
 import { getActivityById } from '../../services/activityService';
 import { submitStudentActivity } from '../../services/submissionService';
 import { syncServerTime, getSynchronizedTime, parseActivityTime } from '../../services/timeSyncService';
@@ -122,6 +124,41 @@ export default function StudentActivityScreen({
           }
           setActivity(data);
           setNotFound(false);
+
+          // Check if this participant has already submitted this activity
+          try {
+            let foundExistingSub = null;
+            if (user?.uid) {
+              const q = query(
+                collection(db, 'submissions'),
+                where('activityId', '==', activityId),
+                where('userUid', '==', user.uid)
+              );
+              const snap = await getDocs(q);
+              if (!snap.empty) {
+                const subDoc = snap.docs[0];
+                foundExistingSub = { ...subDoc.data(), submissionId: subDoc.id };
+              }
+            }
+
+            if (!foundExistingSub) {
+              const localKeys = Object.keys(localStorage).filter((k) => k.startsWith('quizora_sub_'));
+              for (const key of localKeys) {
+                const item = JSON.parse(localStorage.getItem(key) || '{}');
+                if (item.activityId === activityId && ((user && item.userUid === user.uid) || (!user && item.submittedAt))) {
+                  foundExistingSub = item;
+                  break;
+                }
+              }
+            }
+
+            if (foundExistingSub && isMounted) {
+              setSubmittedData(foundExistingSub);
+              setScreenFlow('submitted');
+            }
+          } catch (chkErr) {
+            console.warn("Existing submission check notice:", chkErr.message);
+          }
         }
       } catch (err) {
         console.error("Error loading activity:", err);
@@ -136,7 +173,7 @@ export default function StudentActivityScreen({
     return () => {
       isMounted = false;
     };
-  }, [activityId]);
+  }, [activityId, user]);
 
   // Log password protection check
   useEffect(() => {
@@ -262,12 +299,19 @@ export default function StudentActivityScreen({
 
   // Handle final submission from StudentAttendancePaper
   const handleActivitySubmit = async (answersMap, isAutoSubmit = false) => {
+    if (!user || !user.uid) {
+      alert("Authentication required: you must be signed in to submit this activity.");
+      return;
+    }
+
     try {
       const result = await submitStudentActivity(activityId, {
         activity,
         answers: answersMap,
         participantData: participantValues,
-        userUid: user?.uid || null,
+        userUid: user.uid,
+        userEmail: user.email || profileData?.email || participantValues['Email Address'] || '',
+        participantName: participantValues.Name || profileData?.fullName || user.displayName || 'Participant',
         isAutoSubmit
       });
 
@@ -338,6 +382,19 @@ export default function StudentActivityScreen({
       console.log(`[Task Grade Participant] Navigating to screen. Activity ID: ${activityId}, Step: ${step}`);
     }
   }, [loading, activity, requiresPasswordVerification, screenFlow, activityStatus, activityId]);
+
+  // 0. Mandatory Authentication Check
+  if (!user) {
+    return (
+      <div className="full-page-loader">
+        <div className="loader-brand">
+          <img src={logoImg} alt="Task Grade" className="loader-logo" />
+        </div>
+        <div className="spinner large"></div>
+        <p>Authentication required. Redirecting to sign in...</p>
+      </div>
+    );
+  }
 
   // 1. Loading State
   if (loading) {

@@ -1,6 +1,7 @@
 import { doc, getDoc, setDoc, deleteDoc, collection, query, where, getDocs, onSnapshot } from 'firebase/firestore';
 import { db } from '../firebase';
 import { generateActivityId } from './activityService';
+import { sortNewestFirst } from '../utils/timeUtils';
 
 /**
  * Computes activity status based on current time and start/end dates
@@ -76,7 +77,7 @@ export const getAdminActivities = async (adminUid) => {
     console.warn("Firestore getAdminActivities notice:", err.message);
   }
 
-  return Array.from(activityMap.values());
+  return sortNewestFirst(Array.from(activityMap.values()));
 };
 
 /**
@@ -122,7 +123,7 @@ export const subscribeAdminActivities = (adminUid, callback) => {
           });
         });
 
-        callback(Array.from(activityMap.values()));
+        callback(sortNewestFirst(Array.from(activityMap.values())));
       },
       (err) => {
         console.warn("Firestore subscribeAdminActivities notice:", err.message);

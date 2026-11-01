@@ -143,6 +143,9 @@ export const calculateMcqAutoGrades = (activity, answersMap = {}) => {
  */
 export const submitStudentActivity = async (activityId, submissionPayload) => {
   if (!activityId) throw new Error("Activity ID is required");
+  if (!submissionPayload?.userUid) {
+    throw new Error("Authentication required: submission must include authenticated userUid");
+  }
 
   const submissionId = `sub_${Date.now()}_${Math.random().toString(36).substr(2, 7)}`;
   const now = new Date().toISOString();

@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import { signOut } from 'firebase/auth';
 import { auth } from '../firebase';
 import { useRouter, matchRoute } from '../router';
@@ -7,7 +7,11 @@ import ProfileModal from '../components/Profile/ProfileModal';
 import CreateActivityWizard from '../components/Admin/CreateActivityWizard';
 import AdminHome from '../components/Admin/AdminHome';
 import Step5FinalizeShare from '../components/Admin/Step5FinalizeShare';
+import StudentSubmissionResult from '../components/Student/StudentSubmissionResult';
 import { getActivityById } from '../services/activityService';
+import { getStudentHistorySubmissions } from '../services/evaluationService';
+import { getAdminActivities, subscribeAdminActivities } from '../services/adminService';
+import { extractTimestamp, sortNewestFirst, formatHistoryDateTime } from '../utils/timeUtils';
 import logoImg from '../assets/logo.png';
 
 export default function Dashboard({ user, profileData, onProfileUpdated }) {
@@ -159,13 +163,81 @@ export default function Dashboard({ user, profileData, onProfileUpdated }) {
     }
   };
 
-  // History entries list
-  const historyData = [];
+  // Participant submissions & admin activities history arranged time-wise
+  const [userSubmissions, setUserSubmissions] = useState([]);
+  const [adminActivities, setAdminActivities] = useState([]);
+  const [selectedResultSub, setSelectedResultSub] = useState(null);
 
-  const filteredHistory = historyData.filter((item) => {
-    if (historyFilter === 'all') return true;
-    return item.type === historyFilter;
-  });
+  useEffect(() => {
+    let active = true;
+    let unsubscribeAdmin = () => {};
+
+    if (user?.uid) {
+      getStudentHistorySubmissions(user.uid, user.email).then((list) => {
+        if (active) setUserSubmissions(list || []);
+      });
+
+      getAdminActivities(user.uid).then((acts) => {
+        if (active) setAdminActivities(acts || []);
+      });
+
+      unsubscribeAdmin = subscribeAdminActivities(user.uid, (acts) => {
+        if (active) setAdminActivities(acts || []);
+      });
+    }
+
+    return () => {
+      active = false;
+      unsubscribeAdmin();
+    };
+  }, [user]);
+
+  // History entries list arranged time-wise (newest activity on top)
+  const historyData = useMemo(() => {
+    const userItems = userSubmissions.map((sub) => {
+      const isPublished = sub.isPublished === true || sub.publicationStatus === 'published';
+      const ts = extractTimestamp(sub);
+      return {
+        id: sub.submissionId || `sub_${ts}`,
+        title: sub.activityTitle || sub.activity?.title || 'Activity',
+        purpose: sub.activity?.purpose || 'Exam',
+        date: formatHistoryDateTime(ts),
+        timestamp: ts,
+        type: 'user',
+        status: isPublished
+          ? `Results Published: ${sub.score} / ${sub.totalMarks || 100} (${sub.percentage}%)`
+          : 'In Evaluation / Submitted',
+        isPublished,
+        submission: sub
+      };
+    });
+
+    const adminItems = adminActivities.map((act) => {
+      const ts = extractTimestamp(act);
+      const isPublished = act.status === 'published' || act.computedStatus === 'Active';
+      return {
+        id: act.activityId || `act_${ts}`,
+        title: act.title || 'Activity',
+        purpose: act.purpose || 'Exam',
+        date: formatHistoryDateTime(ts),
+        timestamp: ts,
+        type: 'admin',
+        status: act.computedStatus || (isPublished ? 'Active' : (act.status || 'Draft')),
+        isPublished: false,
+        activity: act
+      };
+    });
+
+    // Combine and sort time-wise with newest activity at top
+    return sortNewestFirst([...userItems, ...adminItems]);
+  }, [userSubmissions, adminActivities]);
+
+  const filteredHistory = useMemo(() => {
+    return historyData.filter((item) => {
+      if (historyFilter === 'all') return true;
+      return item.type === historyFilter;
+    });
+  }, [historyData, historyFilter]);
 
   return (
     <div className="dashboard-layout">
@@ -532,7 +604,17 @@ export default function Dashboard({ user, profileData, onProfileUpdated }) {
               {filteredHistory.length > 0 ? (
                 <div className="history-list">
                   {filteredHistory.map((item) => (
-                    <div key={item.id} className="history-item-card">
+                    <div
+                      key={item.id}
+                      className="history-item-card cursor-pointer"
+                      onClick={() => {
+                        if (item.submission) {
+                          setSelectedResultSub(item.submission);
+                        } else if (item.activity) {
+                          navigate(`/admin/submissions/${item.activity.activityId}`);
+                        }
+                      }}
+                    >
                       <div className="history-item-main">
                         <span className={`type-badge ${item.type}`}>
                           {item.purpose || item.type.toUpperCase()}
@@ -544,7 +626,19 @@ export default function Dashboard({ user, profileData, onProfileUpdated }) {
                         <span className="history-role-tag">
                           {item.type === 'admin' ? 'Created by you' : 'Participated as User'}
                         </span>
-                        <span className="history-status">{item.status}</span>
+                        <span className={`history-status ${item.isPublished ? 'status-published font-bold text-primary' : ''}`}>
+                          {item.status}
+                        </span>
+                        {item.isPublished && (
+                          <span className="text-primary font-bold text-xs ml-2">
+                            View Result &rarr;
+                          </span>
+                        )}
+                        {item.type === 'admin' && (
+                          <span className="text-primary font-bold text-xs ml-2">
+                            View Submissions &rarr;
+                          </span>
+                        )}
                       </div>
                     </div>
                   ))}
@@ -640,6 +734,23 @@ export default function Dashboard({ user, profileData, onProfileUpdated }) {
               shareUrl={shareActivityData.shareUrl}
               activityData={shareActivityData}
               onClose={() => setShareActivityData(null)}
+            />
+          </div>
+        </div>
+      )}
+
+      {/* Student View Published Result Modal (Phase 7) */}
+      {selectedResultSub && (
+        <div className="modal-backdrop" onClick={() => setSelectedResultSub(null)}>
+          <div
+            className="modal-card extra-wide-modal p-0"
+            style={{ maxHeight: '92vh', overflowY: 'auto' }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <StudentSubmissionResult
+              submission={selectedResultSub}
+              activity={selectedResultSub.activity}
+              onFinish={() => setSelectedResultSub(null)}
             />
           </div>
         </div>
