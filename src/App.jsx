@@ -60,6 +60,7 @@ function AppContent() {
   const [profileData, setProfileData] = useState(null);
   const [authLoading, setAuthLoading] = useState(true);
   const [profileLoading, setProfileLoading] = useState(false);
+  const [profileFetchError, setProfileFetchError] = useState(null);
 
   // Catch redirect auth result on load
   useEffect(() => {
@@ -70,12 +71,14 @@ function AppContent() {
 
   // Helper to fetch user profile from Firestore with safety checks
   const fetchProfile = useCallback(async (uid) => {
+    setProfileFetchError(null);
     try {
       const res = await getUserProfile(uid);
       setProfileData(res.data);
       return res.data;
     } catch (err) {
       console.error("Error fetching user profile:", err);
+      setProfileFetchError("Could not load user profile. Please check your network connection.");
       setProfileData(null);
       return null;
     }
@@ -286,6 +289,42 @@ function AppContent() {
           <footer className="app-footer">
             <p>© {new Date().getFullYear()} Task Grade Web Application. Powered by Firebase Auth.</p>
           </footer>
+        </div>
+      );
+    }
+
+    // Network / Loading Error with Retry Option
+    if (profileFetchError && !profileData) {
+      return (
+        <div className="full-page-loader">
+          <div className="loader-brand">
+            <img src={logoImg} alt="Task Grade" className="loader-logo" />
+          </div>
+          <p className="text-danger font-semibold mb-3">{profileFetchError}</p>
+          <button
+            type="button"
+            className="btn btn-primary btn-sm"
+            onClick={() => {
+              setProfileLoading(true);
+              fetchProfile(user.uid).finally(() => setProfileLoading(false));
+            }}
+          >
+            Retry Loading
+          </button>
+        </div>
+      );
+    }
+
+    // Admin access loading / verification guard:
+    // If admin route is opened while profile is still loading or resolving, show loader rather than prematurely 403-ing!
+    if (currentPath.startsWith('/admin') && (!profileData || profileLoading)) {
+      return (
+        <div className="full-page-loader">
+          <div className="loader-brand">
+            <img src={logoImg} alt="Task Grade" className="loader-logo" />
+          </div>
+          <div className="spinner large"></div>
+          <p>Verifying administrative privileges...</p>
         </div>
       );
     }

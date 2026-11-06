@@ -45,7 +45,26 @@ export default function StudentActivityScreen({
 
   const normalizedData = useMemo(() => normalizeActivityQuestions(activity), [activity]);
 
-  // Screen Flow States: 'landing' | 'participant_form' | 'attending' | 'submitted' | 'expired_notice'
+  // Read any saved active session for this activity
+  const savedActiveSession = useMemo(() => {
+    try {
+      const cached = localStorage.getItem(`quizora_active_session_${activityId}`);
+      if (cached) return JSON.parse(cached);
+    } catch {
+      // ignore
+    }
+    return null;
+  }, [activityId]);
+
+  // Session/Group detection
+  const hasMultipleSections = useMemo(() => {
+    return Boolean(normalizedData.isSectionBased && normalizedData.sections && normalizedData.sections.length > 1);
+  }, [normalizedData]);
+
+  const [selectedSectionId, setSelectedSectionId] = useState(() => savedActiveSession?.selectedSectionId || null);
+  const [selectedSectionName, setSelectedSectionName] = useState(() => savedActiveSession?.selectedSectionName || null);
+
+  // Screen Flow States: 'landing' | 'participant_form' | 'section_select' | 'attending' | 'submitted' | 'expired_notice'
   const [screenFlow, setScreenFlow] = useState('landing');
   const [submittedData, setSubmittedData] = useState(null);
   const [expiredReason, setExpiredReason] = useState('');
@@ -266,34 +285,62 @@ export default function StudentActivityScreen({
 
     const participantConfig = activity?.participantForm || [];
 
-    if (participantConfig.length === 0) {
-      // No participant form configured -> enter exam directly
-      setScreenFlow('attending');
-      return;
-    }
-
-    if (screenFlow === 'landing') {
+    if (screenFlow === 'landing' && participantConfig.length > 0) {
       setScreenFlow('participant_form');
       return;
     }
 
-    // Validate required fields
-    const errors = {};
-    participantConfig.forEach((field) => {
-      const isRequired = field.isOptional !== true;
-      const val = participantValues[field.label || field.id];
+    if (screenFlow === 'participant_form') {
+      // Validate required fields
+      const errors = {};
+      participantConfig.forEach((field) => {
+        const isRequired = field.isOptional !== true;
+        const val = participantValues[field.label || field.id];
 
-      if (isRequired && (!val || !val.trim())) {
-        errors[field.label || field.id] = `${field.label || 'This field'} is required.`;
+        if (isRequired && (!val || !val.trim())) {
+          errors[field.label || field.id] = `${field.label || 'This field'} is required.`;
+        }
+      });
+
+      if (Object.keys(errors).length > 0) {
+        setFormErrors(errors);
+        return;
       }
-    });
+    }
 
-    if (Object.keys(errors).length > 0) {
-      setFormErrors(errors);
+    // Check if this is a Session/Group activity where a section must be selected
+    if (hasMultipleSections && !selectedSectionId) {
+      setScreenFlow('section_select');
       return;
     }
 
     // All valid -> Enter active questions attendance screen
+    setScreenFlow('attending');
+  };
+
+  // Participant selects a specific Section / Group to attend
+  const handleSelectSectionAndStart = (section) => {
+    if (!section?.id) return;
+    const secId = String(section.id);
+    const secName = section.name || section.title || 'Section';
+
+    setSelectedSectionId(secId);
+    setSelectedSectionName(secName);
+
+    try {
+      const existing = JSON.parse(localStorage.getItem(`quizora_active_session_${activityId}`) || '{}');
+      localStorage.setItem(`quizora_active_session_${activityId}`, JSON.stringify({
+        ...existing,
+        activityId,
+        selectedSectionId: secId,
+        selectedSectionName: secName,
+        participantData: participantValues,
+        updatedAt: new Date().toISOString()
+      }));
+    } catch {
+      // ignore
+    }
+
     setScreenFlow('attending');
   };
 
@@ -309,6 +356,8 @@ export default function StudentActivityScreen({
         activity,
         answers: answersMap,
         participantData: participantValues,
+        selectedSectionId: selectedSectionId || null,
+        selectedSectionName: selectedSectionName || null,
         userUid: user.uid,
         userEmail: user.email || profileData?.email || participantValues['Email Address'] || '',
         participantName: participantValues.Name || profileData?.fullName || user.displayName || 'Participant',
@@ -659,9 +708,115 @@ export default function StudentActivityScreen({
         activity={activity}
         activityId={activityId}
         participantData={participantValues}
+        selectedSectionId={selectedSectionId}
+        selectedSectionName={selectedSectionName}
         onSubmit={handleActivitySubmit}
         onExpire={handleSessionExpired}
       />
+    );
+  }
+
+  // 5.5 Section / Group Selection Screen (Mandatory before starting if 2+ sections exist)
+  if (screenFlow === 'section_select') {
+    return (
+      <div className="student-access-viewport fade-in">
+        <div className="student-access-container" style={{ maxWidth: '640px' }}>
+          <div className="access-brand-header text-center mb-6">
+            <img src={logoImg} alt="Task Grade" className="access-brand-logo" />
+            <h2 className="access-brand-title">Task Grade</h2>
+          </div>
+
+          <div className="access-status-card bg-white p-6 sm:p-8 rounded-2xl shadow-lg border border-slate-100">
+            <div className="status-badge-header mb-3 text-center">
+              <span className="status-badge-pill-password" style={{ background: '#e0e7ff', color: '#4338ca' }}>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                  <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
+                  <circle cx="9" cy="7" r="4" />
+                  <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
+                  <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+                </svg>
+                <span>SESSION / GROUP SELECTION</span>
+              </span>
+            </div>
+
+            <div className="text-center mb-6">
+              <span className="activity-purpose-label text-xs uppercase font-bold text-muted tracking-wider block mb-1">
+                {activity.purpose || 'Exam'}
+              </span>
+              <h2 className="activity-title-headline text-2xl font-extrabold text-dark mb-2">
+                {activity.title}
+              </h2>
+              <p className="access-status-message text-sm text-muted max-w-md mx-auto mb-0">
+                Please select your assigned section or group to begin. You will attend and be evaluated only on your selected section.
+              </p>
+            </div>
+
+            <div className="sections-selection-grid flex flex-col gap-3 mb-6">
+              {(normalizedData.sections || []).map((sec, sIdx) => {
+                const secQuestions = (sec.parts || []).reduce((acc, p) => acc + (p.questions?.length || 0), 0);
+                const secPartsCount = (sec.parts || []).length;
+                const isCurrentSelected = selectedSectionId === sec.id;
+
+                return (
+                  <div
+                    key={sec.id || sIdx}
+                    className={`section-choice-card p-4 rounded-xl border transition-all ${
+                      isCurrentSelected
+                        ? 'border-indigo-600 bg-indigo-50 shadow-md ring-2 ring-indigo-500 ring-offset-2'
+                        : 'border-slate-200 bg-white hover:border-indigo-300 hover:shadow-sm'
+                    }`}
+                  >
+                    <div className="flex-between align-center">
+                      <div>
+                        <div className="flex-align-center gap-2 mb-1">
+                          <h4 className="font-extrabold text-base text-dark m-0">
+                            {sec.name || `Section ${sIdx + 1}`}
+                          </h4>
+                          {sec.totalMarks && (
+                            <span className="badge badge-primary text-xs font-bold">
+                              {sec.totalMarks} Marks
+                            </span>
+                          )}
+                        </div>
+                        <div className="text-xs text-muted flex-align-center gap-2">
+                          <span>{secQuestions} Questions</span>
+                          {secPartsCount > 1 && <span>• {secPartsCount} Parts</span>}
+                        </div>
+                      </div>
+
+                      <button
+                        type="button"
+                        className="btn btn-primary btn-sm flex-align-center gap-1.5 px-4 py-2"
+                        onClick={() => handleSelectSectionAndStart(sec)}
+                      >
+                        <span>Select &amp; Attend</span>
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                          <line x1="5" y1="12" x2="19" y2="12" />
+                          <polyline points="12 5 19 12 12 19" />
+                        </svg>
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            <button
+              type="button"
+              className="btn btn-secondary btn-sm w-full"
+              onClick={() => {
+                if (activity?.participantForm?.length > 0) {
+                  setScreenFlow('participant_form');
+                } else {
+                  setScreenFlow('landing');
+                }
+              }}
+            >
+              &larr; Back
+            </button>
+          </div>
+        </div>
+      </div>
     );
   }
 

@@ -341,6 +341,11 @@ export default function SubmissionsList({ user, onBack, filterActivityId }) {
                     <span className="eval-identifier-text text-xs text-muted block mt-0.5">
                       ID / Reg: <strong className="text-slate-700">{rollNo}</strong>
                     </span>
+                    {sub.selectedSectionName && (
+                      <span className="badge badge-secondary text-xxs font-bold mt-1 inline-block">
+                        Group: {sub.selectedSectionName}
+                      </span>
+                    )}
                   </div>
 
                   <div className="eval-badges-stack flex flex-col items-end gap-1">

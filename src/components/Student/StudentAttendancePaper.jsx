@@ -12,6 +12,8 @@ export default function StudentAttendancePaper({
   activity,
   activityId,
   participantData,
+  selectedSectionId = null,
+  selectedSectionName = null,
   onSubmit,
   onExpire
 }) {
@@ -43,16 +45,29 @@ export default function StudentAttendancePaper({
     return null;
   }, [cacheKey]);
 
+  // Identify effective selected section
+  const effectiveSectionId = selectedSectionId || savedState?.selectedSectionId || null;
+
+  const lockedSecIdx = useMemo(() => {
+    if (!isSectionBased || !sections || sections.length === 0 || !effectiveSectionId) return null;
+    const idx = sections.findIndex((s) => String(s.id) === String(effectiveSectionId));
+    return idx !== -1 ? idx : null;
+  }, [isSectionBased, sections, effectiveSectionId]);
+
   // Raw Navigation indices from state
-  const [activeSecIdx, setActiveSecIdx] = useState(() => savedState?.activeSecIdx || 0);
+  const [activeSecIdx, setActiveSecIdx] = useState(() => {
+    if (lockedSecIdx !== null) return lockedSecIdx;
+    return savedState?.activeSecIdx || 0;
+  });
   const [activePartIdx, setActivePartIdx] = useState(() => savedState?.activePartIdx || 0);
   const [activeQIdx, setActiveQIdx] = useState(() => savedState?.activeQIdx || 0);
 
-  // Safe bounds indices
+  // Safe bounds indices - locked to selected section when applicable
   const safeSecIdx = useMemo(() => {
     if (!isSectionBased || !sections || sections.length === 0) return 0;
+    if (lockedSecIdx !== null) return lockedSecIdx;
     return Math.min(Math.max(0, activeSecIdx), sections.length - 1);
-  }, [isSectionBased, sections, activeSecIdx]);
+  }, [isSectionBased, sections, activeSecIdx, lockedSecIdx]);
 
   const activeSection = useMemo(() => {
     if (isSectionBased && sections.length > 0) {
@@ -60,6 +75,20 @@ export default function StudentAttendancePaper({
     }
     return null;
   }, [isSectionBased, sections, safeSecIdx]);
+
+  // Isolated list of questions belonging specifically to the active/selected section
+  const targetSectionQuestions = useMemo(() => {
+    if (isSectionBased && activeSection) {
+      const qList = [];
+      (activeSection.parts || []).forEach((p) => {
+        (p.questions || []).forEach((q) => {
+          if (q) qList.push(q);
+        });
+      });
+      if (qList.length > 0) return qList;
+    }
+    return allQuestionsList;
+  }, [isSectionBased, activeSection, allQuestionsList]);
 
   const activePartsList = useMemo(() => {
     if (isSectionBased && activeSection?.parts && activeSection.parts.length > 0) {
@@ -86,12 +115,12 @@ export default function StudentAttendancePaper({
     if (nonNullPart?.questions?.length > 0) {
       return nonNullPart.questions;
     }
-    // Fallback 2: Global allQuestions fallback
-    if (allQuestionsList && allQuestionsList.length > 0) {
-      return allQuestionsList;
+    // Fallback 2: Global targetSectionQuestions fallback
+    if (targetSectionQuestions && targetSectionQuestions.length > 0) {
+      return targetSectionQuestions;
     }
     return [];
-  }, [activePart, activePartsList, allQuestionsList]);
+  }, [activePart, activePartsList, targetSectionQuestions]);
 
   const safeQIdx = useMemo(() => {
     if (!activeQuestions || activeQuestions.length === 0) return 0;
@@ -270,6 +299,8 @@ export default function StudentAttendancePaper({
       localStorage.setItem(cacheKey, JSON.stringify({
         activityId,
         participantData,
+        selectedSectionId: effectiveSectionId,
+        selectedSectionName: selectedSectionName || activeSection?.name || null,
         answers,
         visitedQuestions,
         completedParts,
@@ -283,7 +314,7 @@ export default function StudentAttendancePaper({
     } catch {
       // Ignore quota
     }
-  }, [cacheKey, activityId, participantData, answers, visitedQuestions, completedParts, submittedParts, sessionStartTime, activeSecIdx, activePartIdx, activeQIdx]);
+  }, [cacheKey, activityId, participantData, effectiveSectionId, selectedSectionName, activeSection?.name, answers, visitedQuestions, completedParts, submittedParts, sessionStartTime, activeSecIdx, activePartIdx, activeQIdx]);
 
   // Helper to extract clean array of uploaded answer files for a question
   const getUploadedAnswerFiles = useCallback((questionId) => {
@@ -301,10 +332,10 @@ export default function StudentAttendancePaper({
     return activeQuestions.filter((q) => isQuestionAnswered(q.id)).length;
   }, [activeQuestions, isQuestionAnswered]);
 
-  // Total answered questions across all parts
+  // Total answered questions across active target section / questions
   const totalAnsweredCount = useMemo(() => {
-    return allQuestionsList.filter((q) => isQuestionAnswered(q.id)).length;
-  }, [allQuestionsList, isQuestionAnswered]);
+    return targetSectionQuestions.filter((q) => isQuestionAnswered(q.id)).length;
+  }, [targetSectionQuestions, isQuestionAnswered]);
 
   // Check if a Part has started (for individualTime mode)
   const isPartStarted = useCallback((pIdx, sIdx = activeSecIdx) => {
@@ -456,8 +487,9 @@ export default function StudentAttendancePaper({
     });
   };
 
-  // Switch Active Section safely
+  // Switch Active Section safely (prevented when locked to a selected group)
   const handleSelectSection = (targetSecIdx) => {
+    if (lockedSecIdx !== null) return;
     setActiveSecIdx(targetSecIdx);
     setActivePartIdx(0);
     setActiveQIdx(0);
@@ -517,7 +549,9 @@ export default function StudentAttendancePaper({
     setShowUnansweredWarningModal(false);
 
     const hasNextPart = safePartIdx < activePartsList.length - 1;
-    const hasNextSec = isSectionBased && safeSecIdx < sections.length - 1;
+    // CRITICAL: A participant must attend only their selected section.
+    // Completing one section must not automatically start another section/group.
+    const allowSecAdvance = !effectiveSectionId && isSectionBased && safeSecIdx < sections.length - 1;
 
     if (hasNextPart) {
       if (partNavMode === 'sequential') {
@@ -527,7 +561,7 @@ export default function StudentAttendancePaper({
         setActiveQIdx(0);
         window.scrollTo({ top: 0, behavior: 'smooth' });
       }
-    } else if (hasNextSec) {
+    } else if (allowSecAdvance) {
       if (partNavMode === 'sequential') {
         setShowPartTransitionModal(true);
       } else {
@@ -537,6 +571,7 @@ export default function StudentAttendancePaper({
         window.scrollTo({ top: 0, behavior: 'smooth' });
       }
     } else {
+      // Completed the selected section or final part -> Open Review & Submission
       setShowReviewModal(true);
     }
   };
@@ -544,15 +579,17 @@ export default function StudentAttendancePaper({
   const handleStartNextPartFromTransition = () => {
     setShowPartTransitionModal(false);
     const hasNextPart = safePartIdx < activePartsList.length - 1;
-    const hasNextSec = isSectionBased && safeSecIdx < sections.length - 1;
+    const allowSecAdvance = !effectiveSectionId && isSectionBased && safeSecIdx < sections.length - 1;
 
     if (hasNextPart) {
       setActivePartIdx((prev) => prev + 1);
       setActiveQIdx(0);
-    } else if (hasNextSec) {
+    } else if (allowSecAdvance) {
       setActiveSecIdx((prev) => prev + 1);
       setActivePartIdx(0);
       setActiveQIdx(0);
+    } else {
+      setShowReviewModal(true);
     }
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
@@ -561,7 +598,7 @@ export default function StudentAttendancePaper({
     setSubmissionValidationError('');
 
     // Check if any required Upload question is unanswered (neither file uploaded nor written description provided)
-    const unuploadedRequiredQ = allQuestionsList.find((q) => {
+    const unuploadedRequiredQ = targetSectionQuestions.find((q) => {
       if ((q.type === 'upload' || q.type === 'upload_paper') && q.answerRequired === true) {
         return !isQuestionAnswered(q.id);
       }
@@ -569,9 +606,9 @@ export default function StudentAttendancePaper({
     });
 
     if (unuploadedRequiredQ) {
-      const qIndexInAll = allQuestionsList.findIndex((q) => q.id === unuploadedRequiredQ.id);
+      const qIndexInTarget = targetSectionQuestions.findIndex((q) => q.id === unuploadedRequiredQ.id);
       setSubmissionValidationError(
-        `Please provide an answer (written description or uploaded file) for Question ${qIndexInAll + 1} (${unuploadedRequiredQ.questionText || unuploadedRequiredQ.fileName || 'Upload Question'}) before submitting.`
+        `Please provide an answer (written description or uploaded file) for Question ${qIndexInTarget + 1} (${unuploadedRequiredQ.questionText || unuploadedRequiredQ.fileName || 'Upload Question'}) before submitting.`
       );
       return;
     }
@@ -596,8 +633,8 @@ export default function StudentAttendancePaper({
   // Check if on last question of current part
   const isLastQuestionOfPart = safeQIdx === activeQuestions.length - 1;
 
-  // Check if on final part of the activity
-  const isFinalPart = safePartIdx === activePartsList.length - 1 && (!isSectionBased || safeSecIdx === sections.length - 1);
+  // Check if on final part of the activity / selected section
+  const isFinalPart = safePartIdx === activePartsList.length - 1 && (!isSectionBased || !!effectiveSectionId || safeSecIdx === sections.length - 1);
 
   // Next part metadata for transition modal
   const nextPartInfo = useMemo(() => {
@@ -661,34 +698,42 @@ export default function StudentAttendancePaper({
             )}
 
             <div className="student-progress-pill text-xs font-semibold">
-              <span className="answered-num text-primary font-bold">{totalAnsweredCount}</span>/{allQuestionsList.length} Answered
+              <span className="answered-num text-primary font-bold">{totalAnsweredCount}</span>/{targetSectionQuestions.length} Answered
             </div>
           </div>
         </div>
 
-        {/* SECTION NAVIGATION BAR (When 2+ Sections configured) */}
-        {isSectionBased && sections.length > 1 && (
+        {/* SECTION NAVIGATION BAR (When Sections configured) */}
+        {isSectionBased && (
           <div className="student-section-nav-row">
-            <span className="text-xxs font-bold uppercase tracking-wider text-muted mr-1">Section:</span>
-            {sections.map((sec, sIdx) => {
-              const isSecActive = safeSecIdx === sIdx;
-              const secQuestions = (sec.parts || []).reduce((acc, p) => acc + (p.questions?.length || 0), 0);
-              const secAnswered = (sec.parts || []).reduce((acc, p) => {
-                return acc + (p.questions || []).filter((q) => isQuestionAnswered(q.id)).length;
-              }, 0);
+            <span className="text-xxs font-bold uppercase tracking-wider text-muted mr-1">Section / Group:</span>
+            {effectiveSectionId ? (
+              <div className="section-nav-pill active locked-section-pill cursor-default">
+                <span className="section-nav-name font-bold">{activeSection?.name || `Section ${safeSecIdx + 1}`}</span>
+                <span className="section-nav-counts text-xs">({totalAnsweredCount}/{targetSectionQuestions.length})</span>
+                <span className="badge badge-secondary text-xxs ml-1 font-semibold">Active Group</span>
+              </div>
+            ) : (
+              sections.length > 1 && sections.map((sec, sIdx) => {
+                const isSecActive = safeSecIdx === sIdx;
+                const secQuestions = (sec.parts || []).reduce((acc, p) => acc + (p.questions?.length || 0), 0);
+                const secAnswered = (sec.parts || []).reduce((acc, p) => {
+                  return acc + (p.questions || []).filter((q) => isQuestionAnswered(q.id)).length;
+                }, 0);
 
-              return (
-                <button
-                  key={sec.id || sIdx}
-                  type="button"
-                  className={`section-nav-pill ${isSecActive ? 'active' : ''}`}
-                  onClick={() => handleSelectSection(sIdx)}
-                >
-                  <span className="section-nav-name font-bold">{sec.name || `Section ${sIdx + 1}`}</span>
-                  <span className="section-nav-counts text-xs">({secAnswered}/{secQuestions})</span>
-                </button>
-              );
-            })}
+                return (
+                  <button
+                    key={sec.id || sIdx}
+                    type="button"
+                    className={`section-nav-pill ${isSecActive ? 'active' : ''}`}
+                    onClick={() => handleSelectSection(sIdx)}
+                  >
+                    <span className="section-nav-name font-bold">{sec.name || `Section ${sIdx + 1}`}</span>
+                    <span className="section-nav-counts text-xs">({secAnswered}/{secQuestions})</span>
+                  </button>
+                );
+              })
+            )}
           </div>
         )}
 
@@ -728,36 +773,50 @@ export default function StudentAttendancePaper({
       <div className="student-workspace-layout">
         {/* DESKTOP LEFT SIDEBAR: SECTIONS, PARTS LIST, PART INFO & QUESTION PALETTE */}
         <aside className="student-desktop-sidebar">
-          {/* A1. SECTIONS CARD (When 2+ Sections) */}
-          {isSectionBased && sections.length > 1 && (
+          {/* A1. SECTIONS CARD */}
+          {isSectionBased && (
             <div className="sidebar-card mb-4 p-4 bg-white border rounded-2xl shadow-sm">
               <span className="sidebar-card-label text-xxs font-bold uppercase tracking-wider text-muted block mb-2.5">
-                Sections / Groups
+                Section / Group
               </span>
-              <div className="sidebar-sections-list flex flex-col gap-2">
-                {sections.map((sec, sIdx) => {
-                  const isSecActive = safeSecIdx === sIdx;
-                  const secQuestions = (sec.parts || []).reduce((acc, p) => acc + (p.questions?.length || 0), 0);
-                  const secAnswered = (sec.parts || []).reduce((acc, p) => {
-                    return acc + (p.questions || []).filter((q) => isQuestionAnswered(q.id)).length;
-                  }, 0);
+              {effectiveSectionId ? (
+                <div className="p-3 bg-indigo-50 border border-indigo-100 rounded-xl">
+                  <div className="flex-between align-center mb-1">
+                    <span className="text-xs font-bold text-primary">{activeSection?.name || `Section ${safeSecIdx + 1}`}</span>
+                    <span className="badge badge-primary text-xxs font-bold">Selected</span>
+                  </div>
+                  <span className="text-xxs text-muted block">
+                    {totalAnsweredCount}/{targetSectionQuestions.length} Questions Answered
+                  </span>
+                </div>
+              ) : (
+                sections.length > 1 && (
+                  <div className="sidebar-sections-list flex flex-col gap-2">
+                    {sections.map((sec, sIdx) => {
+                      const isSecActive = safeSecIdx === sIdx;
+                      const secQuestions = (sec.parts || []).reduce((acc, p) => acc + (p.questions?.length || 0), 0);
+                      const secAnswered = (sec.parts || []).reduce((acc, p) => {
+                        return acc + (p.questions || []).filter((q) => isQuestionAnswered(q.id)).length;
+                      }, 0);
 
-                  return (
-                    <button
-                      key={sec.id || sIdx}
-                      type="button"
-                      className={`sidebar-part-btn ${isSecActive ? 'active' : ''}`}
-                      onClick={() => handleSelectSection(sIdx)}
-                    >
-                      <div className="sidebar-part-btn-main">
-                        <span className="part-indicator-icon">{isSecActive ? '●' : '○'}</span>
-                        <span className="part-btn-title">{sec.name || `Section ${sIdx + 1}`}</span>
-                      </div>
-                      <span className="part-btn-progress">{secAnswered}/{secQuestions}</span>
-                    </button>
-                  );
-                })}
-              </div>
+                      return (
+                        <button
+                          key={sec.id || sIdx}
+                          type="button"
+                          className={`sidebar-part-btn ${isSecActive ? 'active' : ''}`}
+                          onClick={() => handleSelectSection(sIdx)}
+                        >
+                          <div className="sidebar-part-btn-main">
+                            <span className="part-indicator-icon">{isSecActive ? '●' : '○'}</span>
+                            <span className="part-btn-title">{sec.name || `Section ${sIdx + 1}`}</span>
+                          </div>
+                          <span className="part-btn-progress">{secAnswered}/{secQuestions}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                )
+              )}
             </div>
           )}
 

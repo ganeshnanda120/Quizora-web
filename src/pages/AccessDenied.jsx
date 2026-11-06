@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useRouter } from '../router';
 import { getUserRole } from '../services/permissionService';
-import { saveUserProfile } from '../services/userService';
+import { saveUserProfile, getUserProfile } from '../services/userService';
 
 export default function AccessDenied({ user, profileData, requiredRole, requiredPermission, onLogout, onProfileUpdated }) {
   const { navigate } = useRouter();
@@ -134,6 +134,33 @@ export default function AccessDenied({ user, profileData, requiredRole, required
           </div>
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+            <button
+              type="button"
+              className="btn btn-secondary"
+              style={{ width: '100%', justifyContent: 'center' }}
+              onClick={async () => {
+                setSwitching(true);
+                try {
+                  const refreshed = await getUserProfile(user?.uid);
+                  if (refreshed?.data && onProfileUpdated) {
+                    onProfileUpdated(refreshed.data);
+                  }
+                  navigate('/admin');
+                } catch {
+                  navigate('/admin');
+                } finally {
+                  setSwitching(false);
+                }
+              }}
+              disabled={switching}
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="18" height="18">
+                <path d="M23 4v6h-6M1 20v-6h6"/>
+                <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>
+              </svg>
+              <span>{switching ? 'Checking Permissions...' : 'Re-check Permissions'}</span>
+            </button>
+
             <button
               type="button"
               className="btn btn-primary"

@@ -173,7 +173,7 @@ export default function Dashboard({ user, profileData, onProfileUpdated }) {
     let unsubscribeAdmin = () => {};
 
     if (user?.uid) {
-      getStudentHistorySubmissions(user.uid, user.email).then((list) => {
+      getStudentHistorySubmissions(user.uid).then((list) => {
         if (active) setUserSubmissions(list || []);
       });
 
@@ -652,10 +652,10 @@ export default function Dashboard({ user, profileData, onProfileUpdated }) {
                       <path d="M16.5 7.5L18 6"/>
                     </svg>
                   </div>
-                  <h3 className="empty-title card-3d-layer-title">No activity yet.</h3>
+                  <h3 className="empty-title card-3d-layer-title">No activity history available yet.</h3>
                   <p className="empty-desc card-3d-layer-sub">
                     {historyFilter === 'all'
-                      ? 'You have not participated in or created any exams or assignments yet.'
+                      ? 'No activity history available yet.'
                       : historyFilter === 'user'
                       ? 'No exam participation history recorded for this account.'
                       : 'No admin creation history recorded for this account.'}

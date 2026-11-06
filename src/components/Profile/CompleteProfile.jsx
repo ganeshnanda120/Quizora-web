@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { saveUserProfile } from '../../services/userService';
 import logoImg from '../../assets/logo.png';
 
@@ -10,11 +10,30 @@ const GENDER_OPTIONS = [
 ];
 
 export default function CompleteProfile({ user, initialProfile, onComplete }) {
-  const [fullName, setFullName] = useState(initialProfile?.fullName || user?.displayName || '');
-  const [gender, setGender] = useState(initialProfile?.gender || 'Male');
-  const [dateOfBirth, setDateOfBirth] = useState(initialProfile?.dateOfBirth || '');
+  const draftKey = `quizora_draft_profile_${user?.uid || 'guest'}`;
+  const savedDraft = useMemo(() => {
+    try {
+      const raw = sessionStorage.getItem(draftKey);
+      return raw ? JSON.parse(raw) : null;
+    } catch {
+      return null;
+    }
+  }, [draftKey]);
+
+  const [fullName, setFullName] = useState(() => savedDraft?.fullName || initialProfile?.fullName || user?.displayName || '');
+  const [gender, setGender] = useState(() => savedDraft?.gender || initialProfile?.gender || 'Male');
+  const [dateOfBirth, setDateOfBirth] = useState(() => savedDraft?.dateOfBirth || initialProfile?.dateOfBirth || '');
   
   const [selectedFile, setSelectedFile] = useState(null);
+
+  // Sync draft in sessionStorage so user inputs are preserved on navigation or refresh
+  useEffect(() => {
+    try {
+      sessionStorage.setItem(draftKey, JSON.stringify({ fullName, gender, dateOfBirth }));
+    } catch {
+      // Ignore
+    }
+  }, [fullName, gender, dateOfBirth, draftKey]);
 
   // Fallback photo priority:
   // 1. Newly selected file preview blob
@@ -97,6 +116,9 @@ export default function CompleteProfile({ user, initialProfile, onComplete }) {
         dateOfBirth,
         photoURL: initialPhoto,
         profileCompleted: true,
+        role: initialProfile?.role || 'admin',
+        isAdmin: initialProfile?.isAdmin !== undefined ? initialProfile.isAdmin : true,
+        isMainAdmin: initialProfile?.isMainAdmin !== undefined ? initialProfile.isMainAdmin : true,
         createdAt: initialProfile?.createdAt || now,
         updatedAt: now
       };
@@ -108,6 +130,12 @@ export default function CompleteProfile({ user, initialProfile, onComplete }) {
         selectedFile,
         user?.photoURL || ''
       );
+
+      try {
+        sessionStorage.removeItem(draftKey);
+      } catch {
+        // Ignore
+      }
 
       // Pass savedData to parent to navigate to Dashboard immediately
       if (onComplete) {

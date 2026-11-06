@@ -14,6 +14,33 @@ export default function StudentSubmissionResult({
   const isPublished = submission?.isPublished === true || submission?.publicationStatus === 'published';
   const normalized = useMemo(() => normalizeActivityQuestions(activity), [activity]);
 
+  // Isolate review questions to the participant's selected section if applicable
+  const displayQuestions = useMemo(() => {
+    if (submission?.selectedSectionId && normalized.isSectionBased && Array.isArray(normalized.sections)) {
+      const sec = normalized.sections.find((s) => String(s.id) === String(submission.selectedSectionId));
+      if (sec) {
+        const secQs = [];
+        (sec.parts || []).forEach((p) => {
+          (p.questions || []).forEach((q) => {
+            if (q) secQs.push(q);
+          });
+        });
+        if (secQs.length > 0) return secQs;
+      }
+    }
+    return normalized.allQuestions;
+  }, [submission, normalized]);
+
+  const totalMaxMarks = useMemo(() => {
+    if (submission?.totalMarksPossible !== undefined && submission.totalMarksPossible !== null) {
+      return parseFloat(submission.totalMarksPossible) || 0;
+    }
+    if (submission?.sectionTotalMarks !== undefined && submission.sectionTotalMarks !== null) {
+      return parseFloat(submission.sectionTotalMarks) || 0;
+    }
+    return displayQuestions.reduce((acc, q) => acc + (parseFloat(q.marks) || 0), 0);
+  }, [submission, displayQuestions]);
+
   const formatDateTime = (isoStr) => {
     if (!isoStr) return '';
     try {
@@ -94,6 +121,12 @@ export default function StudentSubmissionResult({
                 <span className="text-muted">Participant:</span>
                 <strong className="text-slate-800">{participantName}</strong>
               </div>
+              {submission?.selectedSectionName && (
+                <div className="flex-between py-1 border-bottom">
+                  <span className="text-muted">Section / Group:</span>
+                  <strong className="text-primary font-bold">{submission.selectedSectionName}</strong>
+                </div>
+              )}
               {rollNumber && (
                 <div className="flex-between py-1 border-bottom">
                   <span className="text-muted">ID / Roll #:</span>
@@ -134,7 +167,7 @@ export default function StudentSubmissionResult({
                 <div className="result-score-number font-black text-5xl text-primary mb-2">
                   {submission.score ?? 0}{' '}
                   <span className="text-2xl font-bold text-slate-500">
-                    / {submission.totalMarks || activity?.totalMarks || 100}
+                    / {totalMaxMarks}
                   </span>
                 </div>
                 {submission.percentage !== undefined && (
@@ -180,7 +213,7 @@ export default function StudentSubmissionResult({
                 </h3>
 
                 <div className="question-review-stack flex flex-col gap-4">
-                  {normalized.allQuestions.map((q, qIdx) => {
+                  {displayQuestions.map((q, qIdx) => {
                     const studentAnswer = submission.answers?.[q.id] || submission.answers?.[`${q.id}_files`];
                     const studentFiles = getQuestionUploadedFiles(q.id, submission.answers);
                     const studentNotes = getQuestionDescriptionText(q.id, submission.answers);

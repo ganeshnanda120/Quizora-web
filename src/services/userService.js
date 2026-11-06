@@ -11,30 +11,33 @@ import { db, storage } from '../firebase';
 export const checkIsProfileComplete = (data) => {
   if (!data || typeof data !== 'object') return false;
 
-  // 1. Check explicit completion flags
-  if (
+  // If explicitly marked incomplete, return false
+  if (data.profileCompleted === false || data.isProfileCompleted === false || data.profile_completed === false) {
+    return false;
+  }
+
+  const name = (data.fullName || data.name || data.full_name || data.displayName || '').trim();
+  const gender = (data.gender || '').trim().toLowerCase();
+  const dob = (data.dateOfBirth || data.dob || data.date_of_birth || data.birthDate || '').trim();
+
+  // Validate gender: must be one of the supported valid options, not 'not_specified' or empty
+  const isValidGender = gender && gender !== 'not_specified' && gender !== 'unknown' && gender !== 'null';
+  if (!isValidGender) return false;
+
+  // Mandatory fields: name and date of birth must not be empty
+  if (name.length < 1 || dob.length < 1) return false;
+
+  // Explicit completion flag
+  const hasCompleteFlag = (
     data.profileCompleted === true ||
     data.isProfileCompleted === true ||
     data.profile_completed === true ||
-    data.is_profile_completed === true ||
     data.isCompleted === true ||
     data.completed === true ||
     data.profileCompleted === 'true'
-  ) {
-    return true;
-  }
+  );
 
-  // 2. Check if required fields exist and are non-empty
-  const name = (data.fullName || data.name || data.full_name || data.displayName || '').trim();
-  const gender = (data.gender || '').trim();
-  const dob = (data.dateOfBirth || data.dob || data.date_of_birth || data.birthDate || '').trim();
-
-  // If user has a name and either gender or date of birth filled, profile is considered complete
-  if (name.length > 0 && (gender.length > 0 || dob.length > 0)) {
-    return true;
-  }
-
-  return false;
+  return Boolean(hasCompleteFlag);
 };
 
 /**
@@ -254,21 +257,29 @@ export const saveUserProfile = async (uid, profileData, imageFile = null, fallba
   }
 
   const cleanFullName = (profileData.fullName || profileData.name || '').trim();
+  const gender = (profileData.gender || '').trim();
+  const dob = (profileData.dateOfBirth || profileData.dob || '').trim();
   const now = new Date().toISOString();
+
+  // Only mark complete if the required profile fields (name, gender, dob) are present and profileCompleted is requested
+  const isComplete = (profileData.profileCompleted === true) &&
+    cleanFullName.length >= 1 &&
+    gender.length >= 1 &&
+    dob.length >= 1;
 
   const userPayload = {
     uid,
     fullName: cleanFullName,
     name: cleanFullName,
     email: profileData.email || '',
-    gender: profileData.gender || 'Prefer not to say',
-    dateOfBirth: profileData.dateOfBirth || profileData.dob || '',
-    dob: profileData.dateOfBirth || profileData.dob || '',
+    gender: gender || 'Prefer not to say',
+    dateOfBirth: dob,
+    dob: dob,
     photoURL: photoURL || '',
     profileImageUrl: photoURL || '',
-    profileCompleted: true,
-    isProfileCompleted: true,
-    profile_completed: true,
+    profileCompleted: isComplete,
+    isProfileCompleted: isComplete,
+    profile_completed: isComplete,
     updatedAt: now
   };
 

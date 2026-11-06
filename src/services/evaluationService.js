@@ -20,10 +20,27 @@ export const getSubmissionEvaluationStatus = (submission, activity = null) => {
 
   // If questions are present, check questionGrades
   if (activity) {
-    const { allQuestions } = normalizeActivityQuestions(activity);
+    const normalized = normalizeActivityQuestions(activity);
+    let targetQuestions = normalized.allQuestions;
+
+    if (submission.selectedSectionId && normalized.isSectionBased && Array.isArray(normalized.sections)) {
+      const matchedSec = normalized.sections.find((s) => String(s.id) === String(submission.selectedSectionId));
+      if (matchedSec) {
+        const secQs = [];
+        (matchedSec.parts || []).forEach((p) => {
+          (p.questions || []).forEach((q) => {
+            if (q) secQs.push(q);
+          });
+        });
+        if (secQs.length > 0) {
+          targetQuestions = secQs;
+        }
+      }
+    }
+
     const grades = submission.questionGrades || {};
     let evaluatedCount = 0;
-    allQuestions.forEach((q) => {
+    targetQuestions.forEach((q) => {
       const g = grades[q.id];
       if (g && g.marksAwarded !== undefined && g.marksAwarded !== null && g.marksAwarded !== '') {
         evaluatedCount++;
@@ -31,7 +48,7 @@ export const getSubmissionEvaluationStatus = (submission, activity = null) => {
     });
 
     if (evaluatedCount === 0) return 'pending';
-    if (evaluatedCount === allQuestions.length) return 'completed';
+    if (evaluatedCount === targetQuestions.length) return 'completed';
     return 'partially_checked';
   }
 
@@ -311,24 +328,76 @@ export const calculateSubmissionEvaluation = (activity, submission, currentGrade
     });
   }
 
-  const totalQuestions = normalized.allQuestions.length;
-  const isComplete = evaluatedCount === totalQuestions && totalQuestions > 0;
-  const percentage = totalMaxMarks > 0
-    ? Math.max(0, parseFloat(((Math.max(0, totalObtainedMarks) / totalMaxMarks) * 100).toFixed(1)))
+  // If the submission is associated with a specific Section / Group, scope overall marks to that section
+  let finalTotalMaxMarks = totalMaxMarks;
+  let finalTotalObtained = totalObtainedMarks;
+  let finalTotalQuestions = normalized.allQuestions.length;
+  let finalEvaluatedCount = evaluatedCount;
+  let finalCorrectCount = correctCount;
+  let finalIncorrectCount = incorrectCount;
+  let finalPartialCount = partialCount;
+  let finalUnansweredCount = unansweredCount;
+
+  if (submission.selectedSectionId && normalized.isSectionBased && Array.isArray(normalized.sections)) {
+    const matchedSec = normalized.sections.find((s) => String(s.id) === String(submission.selectedSectionId));
+    if (matchedSec) {
+      const secQIds = new Set();
+      (matchedSec.parts || []).forEach((p) => {
+        (p.questions || []).forEach((q) => {
+          if (q) secQIds.add(q.id);
+        });
+      });
+
+      if (secQIds.size > 0) {
+        finalTotalQuestions = secQIds.size;
+        finalTotalMaxMarks = matchedSec.totalMarks
+          ? parseFloat(matchedSec.totalMarks)
+          : (sectionScores[matchedSec.id]?.maxMarks || 0);
+        finalTotalObtained = sectionScores[matchedSec.id]?.obtainedMarks || 0;
+
+        let evalC = 0;
+        let corrC = 0;
+        let incorrC = 0;
+        let partC = 0;
+        let unansC = 0;
+
+        secQIds.forEach((qId) => {
+          const qEval = evaluatedQuestionsMap[qId];
+          if (qEval) {
+            if (qEval.evalStatus === 'evaluated') evalC++;
+            if (!qEval.isAnswered) unansC++;
+            if (qEval.numericAwarded === qEval.maxMarks && qEval.maxMarks > 0) corrC++;
+            else if (qEval.numericAwarded > 0 && qEval.numericAwarded < qEval.maxMarks) partC++;
+            else if (qEval.numericAwarded <= 0 && qEval.isAnswered) incorrC++;
+          }
+        });
+
+        finalEvaluatedCount = evalC;
+        finalCorrectCount = corrC;
+        finalIncorrectCount = incorrC;
+        finalPartialCount = partC;
+        finalUnansweredCount = unansC;
+      }
+    }
+  }
+
+  const isComplete = finalEvaluatedCount === finalTotalQuestions && finalTotalQuestions > 0;
+  const percentage = finalTotalMaxMarks > 0
+    ? Math.max(0, parseFloat(((Math.max(0, finalTotalObtained) / finalTotalMaxMarks) * 100).toFixed(1)))
     : 100.0;
 
   return {
-    totalMaxMarks,
-    totalObtainedMarks: Math.max(0, totalObtainedMarks),
-    rawObtainedMarks: totalObtainedMarks,
+    totalMaxMarks: finalTotalMaxMarks,
+    totalObtainedMarks: Math.max(0, finalTotalObtained),
+    rawObtainedMarks: finalTotalObtained,
     percentage,
-    totalQuestions,
-    evaluatedCount,
+    totalQuestions: finalTotalQuestions,
+    evaluatedCount: finalEvaluatedCount,
     isComplete,
-    correctCount,
-    incorrectCount,
-    partialCount,
-    unansweredCount,
+    correctCount: finalCorrectCount,
+    incorrectCount: finalIncorrectCount,
+    partialCount: finalPartialCount,
+    unansweredCount: finalUnansweredCount,
     partScores,
     sectionScores,
     questionGrades: evaluatedQuestionsMap
@@ -510,41 +579,42 @@ export const unpublishSubmissionResult = async (submissionId, evaluator = {}) =>
  * @param {string} [email] 
  * @returns {Promise<Array>}
  */
-export const getStudentHistorySubmissions = async (userUid, email = '') => {
-  const localList = [];
-  const localKeys = Object.keys(localStorage).filter((k) => k.startsWith('quizora_sub_'));
+export const getStudentHistorySubmissions = async (userUid) => {
+  if (!userUid) return [];
 
+  const submissionMap = new Map();
+
+  // 1. Query Firestore for genuine submissions strictly belonging to authenticated userUid
+  try {
+    const q = query(collection(db, 'submissions'), where('userUid', '==', userUid));
+    const snap = await getDocs(q);
+    snap.forEach((docSnap) => {
+      const data = docSnap.data();
+      if (data && data.activityId) {
+        submissionMap.set(docSnap.id, {
+          ...data,
+          submissionId: docSnap.id
+        });
+      }
+    });
+  } catch (err) {
+    console.warn("Firestore getStudentHistorySubmissions notice:", err.message);
+  }
+
+  // 2. Check local storage cache strictly for this userUid
+  const localKeys = Object.keys(localStorage).filter((k) => k.startsWith('quizora_sub_'));
   localKeys.forEach((key) => {
     try {
       const item = JSON.parse(localStorage.getItem(key) || '{}');
-      const matchesUid = userUid && item.userUid === userUid;
-      const matchesEmail = email && (item.participantData?.['Email Address'] === email || item.participantDetails?.['Email Address'] === email || item.participantEmail === email);
-      if (matchesUid || matchesEmail) {
-        localList.push(item);
+      if (item && item.userUid === userUid && item.activityId && item.submissionId) {
+        if (!submissionMap.has(item.submissionId)) {
+          submissionMap.set(item.submissionId, item);
+        }
       }
     } catch {
       // Ignore
     }
   });
 
-  try {
-    if (userUid) {
-      const q = query(collection(db, 'submissions'), where('userUid', '==', userUid));
-      const snap = await getDocs(q);
-      const firestoreList = [];
-      snap.forEach((docSnap) => {
-        firestoreList.push({
-          ...docSnap.data(),
-          submissionId: docSnap.id
-        });
-      });
-      if (firestoreList.length > 0) {
-        return sortNewestFirst(firestoreList);
-      }
-    }
-  } catch (err) {
-    console.warn("Firestore getStudentHistorySubmissions notice:", err.message);
-  }
-
-  return sortNewestFirst(localList);
+  return sortNewestFirst(Array.from(submissionMap.values()));
 };

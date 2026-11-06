@@ -52,9 +52,10 @@ export const uploadStudentAnswerFile = async (activityId, file) => {
  * Calculate automated MCQ scores & negative marking
  * @param {object} activity 
  * @param {object} answersMap { [questionId]: answerValue }
+ * @param {Array|null} targetQuestions Optional isolated list of questions to grade (e.g. for a selected section)
  * @returns {object}
  */
-export const calculateMcqAutoGrades = (activity, answersMap = {}) => {
+export const calculateMcqAutoGrades = (activity, answersMap = {}, targetQuestions = null) => {
   const isAutoGrade = activity?.autoGradeMCQ !== false;
   const isNegativeMarking = !!activity?.enableNegativeMarking;
   const defaultNeg = parseFloat(activity?.negativeMarkValue || '0.25') || 0;
@@ -67,10 +68,12 @@ export const calculateMcqAutoGrades = (activity, answersMap = {}) => {
   let incorrectCount = 0;
   let unansweredCount = 0;
 
-  const { allQuestions } = normalizeActivityQuestions(activity);
+  const candidateQuestions = Array.isArray(targetQuestions) && targetQuestions.length > 0
+    ? targetQuestions
+    : normalizeActivityQuestions(activity).allQuestions;
 
-  allQuestions.forEach((q) => {
-    if (q.type !== 'mcq') return;
+  candidateQuestions.forEach((q) => {
+    if (!q || q.type !== 'mcq') return;
 
     const maxM = parseFloat(q.marks || 0);
     totalMcqMax += maxM;
@@ -150,15 +153,41 @@ export const submitStudentActivity = async (activityId, submissionPayload) => {
   const submissionId = `sub_${Date.now()}_${Math.random().toString(36).substr(2, 7)}`;
   const now = new Date().toISOString();
 
-  // Calculate MCQ grades if autoGradeMCQ is on
-  const mcqGrading = calculateMcqAutoGrades(submissionPayload.activity, submissionPayload.answers);
+  // Normalize questions & sections
+  const normalized = normalizeActivityQuestions(submissionPayload.activity);
+  
+  // Check if participant attended a specific Section/Group
+  let targetQuestions = normalized.allQuestions;
+  let selectedSectionMeta = null;
 
-  // Check if entire activity has manual questions
-  const { allQuestions } = normalizeActivityQuestions(submissionPayload.activity);
-  const hasManualQuestions = allQuestions.some((q) => q && q.type !== 'mcq');
+  if (submissionPayload.selectedSectionId && normalized.isSectionBased && Array.isArray(normalized.sections)) {
+    const matchedSec = normalized.sections.find((s) => String(s.id) === String(submissionPayload.selectedSectionId));
+    if (matchedSec) {
+      selectedSectionMeta = matchedSec;
+      const secQs = [];
+      (matchedSec.parts || []).forEach((p) => {
+        (p.questions || []).forEach((q) => {
+          if (q) secQs.push(q);
+        });
+      });
+      if (secQs.length > 0) {
+        targetQuestions = secQs;
+      }
+    }
+  }
 
-  // Accurately calculate total unanswered count across all question types (MCQ, written, upload)
-  const totalUnanswered = allQuestions.filter((q) => !isQuestionAnswered(q, submissionPayload.answers)).length;
+  // Calculate MCQ grades if autoGradeMCQ is on against isolated target questions
+  const mcqGrading = calculateMcqAutoGrades(submissionPayload.activity, submissionPayload.answers, targetQuestions);
+
+  // Check if evaluated questions have manual questions
+  const hasManualQuestions = targetQuestions.some((q) => q && q.type !== 'mcq');
+
+  // Accurately calculate total unanswered count across target question types (MCQ, written, upload)
+  const totalUnanswered = targetQuestions.filter((q) => !isQuestionAnswered(q, submissionPayload.answers)).length;
+
+  const totalPossibleMarks = selectedSectionMeta?.totalMarks
+    ? parseFloat(selectedSectionMeta.totalMarks)
+    : targetQuestions.reduce((acc, q) => acc + (parseFloat(q.marks) || 0), 0);
 
   const finalPayload = {
     ...submissionPayload,
@@ -170,9 +199,13 @@ export const submitStudentActivity = async (activityId, submissionPayload) => {
     autoMcqMarks: mcqGrading.autoMcqMarks,
     questionGrades: mcqGrading.questionGrades,
     score: mcqGrading.totalMcqObtained,
+    totalMarksPossible: totalPossibleMarks,
     correctAnswers: mcqGrading.correctCount,
     incorrectAnswers: mcqGrading.incorrectCount,
-    unansweredQuestions: totalUnanswered
+    unansweredQuestions: totalUnanswered,
+    totalAttemptQuestions: targetQuestions.length,
+    selectedSectionId: submissionPayload.selectedSectionId || selectedSectionMeta?.id || null,
+    selectedSectionName: submissionPayload.selectedSectionName || selectedSectionMeta?.name || null
   };
 
   // Cache locally

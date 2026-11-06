@@ -54,6 +54,23 @@ export default function SubmissionChecker({ submission, activity, user, onClose,
   // Question refs for smooth scrolling navigation
   const questionRefs = useRef({});
 
+  // Isolate evaluated questions to student's selected section if applicable
+  const checkerQuestions = useMemo(() => {
+    if (submission?.selectedSectionId && normalized.isSectionBased && Array.isArray(normalized.sections)) {
+      const sec = normalized.sections.find((s) => String(s.id) === String(submission.selectedSectionId));
+      if (sec) {
+        const secQs = [];
+        (sec.parts || []).forEach((p) => {
+          (p.questions || []).forEach((q) => {
+            if (q) secQs.push(q);
+          });
+        });
+        if (secQs.length > 0) return secQs;
+      }
+    }
+    return normalized.allQuestions;
+  }, [submission, normalized]);
+
   // Real-time calculation of overall, part-wise, and section-wise results
   const evaluationResult = useMemo(() => {
     return calculateSubmissionEvaluation(activity, submission, grades);
@@ -315,6 +332,12 @@ export default function SubmissionChecker({ submission, activity, user, onClose,
                     <strong className="meta-value">{String(val || 'N/A')}</strong>
                   </div>
                 ))}
+                {submission.selectedSectionName && (
+                  <div className="meta-pair">
+                    <span className="meta-label">Selected Group / Section:</span>
+                    <strong className="meta-value text-primary font-bold">{submission.selectedSectionName}</strong>
+                  </div>
+                )}
                 <div className="meta-pair">
                   <span className="meta-label">Submitted Date/Time:</span>
                   <span className="meta-value">
@@ -328,7 +351,7 @@ export default function SubmissionChecker({ submission, activity, user, onClose,
             <div className="question-nav-strip mb-4">
               <span className="nav-strip-label">Questions:</span>
               <div className="nav-strip-pills">
-                {normalized.allQuestions.map((q, idx) => {
+                {checkerQuestions.map((q, idx) => {
                   const qEval = evaluationResult.questionGrades[q.id];
                   const isChecked = qEval && qEval.evalStatus === 'evaluated';
                   const isAuto = qEval && qEval.isAutoGraded;
@@ -358,11 +381,13 @@ export default function SubmissionChecker({ submission, activity, user, onClose,
             {/* Questions List */}
             <div className="questions-evaluation-container">
               {(normalized.isSectionBased && Array.isArray(normalized.sections) && normalized.sections.length > 0
-                ? normalized.sections
+                ? (submission.selectedSectionId
+                    ? normalized.sections.filter((s) => String(s.id) === String(submission.selectedSectionId))
+                    : normalized.sections)
                 : [{ id: 'sec_root', title: '', parts: normalized.parts || [] }]
               ).map((section, sIdx) => (
                 <div key={section.id || sIdx} className="section-eval-block mb-6">
-                  {normalized.isSectionBased && section.title && (
+                  {normalized.isSectionBased && (section.title || section.name) && (
                     <div className="section-eval-header mb-3 pb-2 border-bottom flex-between">
                       <h4 className="font-extrabold text-primary text-md m-0">
                         📂 Section {sIdx + 1}: {section.title || section.name}
@@ -387,7 +412,7 @@ export default function SubmissionChecker({ submission, activity, user, onClose,
                       {/* Part Questions */}
                       <div className="questions-card-stack">
                         {part.questions.map((q) => {
-                          const globalIdx = normalized.allQuestions.findIndex((item) => item.id === q.id);
+                          const globalIdx = checkerQuestions.findIndex((item) => item.id === q.id);
                           const studentAnswer = submission.answers?.[q.id] || submission.answers?.[`${q.id}_files`];
                           const studentFiles = getQuestionUploadedFiles(q.id, submission.answers);
                           const studentNotes = getQuestionDescriptionText(q.id, submission.answers);

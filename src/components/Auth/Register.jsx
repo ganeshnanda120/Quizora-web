@@ -110,13 +110,16 @@ export default function Register({ onNavigate }) {
           displayName: fullName.trim(),
         });
 
-        // Initialize participant profile with student role
+        // Save initial incomplete profile record (requires profile setup after email verification)
         try {
           await saveUserProfile(newUser.uid, {
             fullName: fullName.trim(),
             name: fullName.trim(),
             email: email.trim(),
-            role: 'Student'
+            role: 'admin',
+            isAdmin: true,
+            isMainAdmin: true,
+            profileCompleted: false
           });
         } catch (profileErr) {
           console.warn('Initial profile creation notice:', profileErr);
