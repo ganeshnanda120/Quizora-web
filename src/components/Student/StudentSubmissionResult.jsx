@@ -1,5 +1,4 @@
 import { useMemo } from 'react';
-import logoImg from '../../assets/logo.png';
 import {
   normalizeActivityQuestions,
   getQuestionUploadedFiles,
@@ -75,9 +74,8 @@ export default function StudentSubmissionResult({
     <div className="student-submission-result-viewport fade-in">
       <div className="student-result-container max-w-3xl mx-auto py-6">
         {/* Brand Header */}
-        <div className="student-result-brand text-center mb-6">
-          <img src={logoImg} alt="Task Grade" className="student-result-logo" />
-          <h2 className="student-result-app-title">Task Grade</h2>
+        <div className="access-brand-header text-center mb-6">
+          <h2 className="access-brand-title">Task Grade</h2>
         </div>
 
         {/* Main Result Card */}

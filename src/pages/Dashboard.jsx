@@ -61,8 +61,6 @@ export default function Dashboard({ user, profileData, onProfileUpdated }) {
   const [joining, setJoining] = useState(false);
   const [urlError, setUrlError] = useState('');
   const [joinedActivity, setJoinedActivity] = useState(null);
-  const [selectedSectionIdx, setSelectedSectionIdx] = useState(null);
-  const [sectionSelectionError, setSectionSelectionError] = useState('');
 
   const dropdownRef = useRef(null);
 
@@ -495,68 +493,12 @@ export default function Dashboard({ user, profileData, onProfileUpdated }) {
                   )}
                   <p className="found-admin">Admin: {joinedActivity.adminName}</p>
 
-                  {/* CHOOSE YOUR SECTION (Shown ONLY when Sections/Groups are enabled) */}
-                  {(joinedActivity.partMode === 'sections' || (joinedActivity.sections && joinedActivity.sections.length > 0)) && (
-                    <div className="choose-section-selection-box mt-3 pt-3 border-top">
-                      <div className="flex-between align-center mb-2">
-                        <h4 className="choose-section-heading font-bold text-dark text-sm m-0">
-                          Choose Your Section <span className="req-star">*</span>
-                        </h4>
-                        <span className="text-xs text-muted">
-                          {(joinedActivity.sections || []).length} Sections Available
-                        </span>
-                      </div>
-                      <p className="text-xs text-muted mb-3">
-                        Please select your department, batch, or section to access your specific question paper.
-                      </p>
-
-                      <div className="section-selection-grid">
-                        {(joinedActivity.sections || []).map((sec, sIdx) => {
-                          const isSelected = selectedSectionIdx === sIdx;
-                          const partCount = (sec.parts || []).length;
-
-                          return (
-                            <button
-                              key={sec.id || sIdx}
-                              type="button"
-                              className={`section-select-pill-btn ${isSelected ? 'selected-section' : ''}`}
-                              onClick={() => {
-                                setSectionSelectionError('');
-                                setSelectedSectionIdx(sIdx);
-                              }}
-                            >
-                              <div className="flex-between align-center">
-                                <span className="font-bold text-sm text-dark">{sec.name}</span>
-                                {isSelected && <span className="selected-check-mark">✓</span>}
-                              </div>
-                              <span className="text-xs text-muted block mt-1">
-                                {partCount} {partCount === 1 ? 'Part' : 'Parts'}
-                              </span>
-                            </button>
-                          );
-                        })}
-                      </div>
-
-                      {sectionSelectionError && (
-                        <div className="field-error-text mt-2 font-semibold text-xs text-danger">
-                          {sectionSelectionError}
-                        </div>
-                      )}
-                    </div>
-                  )}
-
-                  <div className="found-actions mt-3">
+                  <div className="found-actions mt-4 pt-3 border-top">
                     <button
                       type="button"
-                      className="btn btn-success btn-lg"
+                      className="btn btn-success btn-lg w-full"
                       onClick={() => {
-                        const hasSections = (joinedActivity.partMode === 'sections' || (joinedActivity.sections && joinedActivity.sections.length > 0));
-                        if (hasSections && selectedSectionIdx === null) {
-                          setSectionSelectionError('Please choose your section to continue.');
-                          return;
-                        }
-                        const queryParam = hasSections && selectedSectionIdx !== null ? `?section=${selectedSectionIdx}` : '';
-                        navigate(`/activity/${joinedActivity.activityId}${queryParam}`);
+                        navigate(`/activity/${joinedActivity.activityId}`);
                       }}
                     >
                       Start {joinedActivity.purpose || 'Activity'} &rarr;

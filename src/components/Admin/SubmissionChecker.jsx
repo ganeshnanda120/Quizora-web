@@ -320,9 +320,9 @@ export default function SubmissionChecker({ submission, activity, user, onClose,
           <div className="checker-main-scroll">
             
             {/* Participant Identification Card */}
-            <div className="participant-summary-card mb-4 p-4 bg-slate-50 border rounded-xl">
-              <div className="flex-between align-center mb-2">
-                <h4 className="text-sm font-bold text-slate-800 m-0">Participant Identification &amp; Submission Metadata</h4>
+            <div className="participant-summary-card mb-4">
+              <div className="participant-card-header mb-2">
+                <h4 className="text-sm font-bold text-slate-800 m-0">Participant Identification & Submission Metadata</h4>
                 <span className="text-xs text-muted">Submission ID: <code>{submission.submissionId}</code></span>
               </div>
               <div className="participant-meta-grid">
@@ -507,7 +507,7 @@ export default function SubmissionChecker({ submission, activity, user, onClose,
                                   {q.type === 'mcq' && (
                                     <div className="mcq-review-display">
                                       <div className="selected-choice-line">
-                                        <span className="choice-lbl">Selected Choice:</span>
+                                        <span className="choice-lbl">Selected Choice:</span>{' '}
                                         <strong className="choice-val">
                                           {studentAnswer !== undefined && studentAnswer !== '' && studentAnswer !== null
                                             ? (q.options?.[studentAnswer] || `Option ${Number(studentAnswer) + 1}: ${studentAnswer}`)
@@ -630,7 +630,7 @@ export default function SubmissionChecker({ submission, activity, user, onClose,
 
               {/* Overall Participant Remark (Phase 4) */}
               <div className="overall-remark-card p-4 bg-white border rounded-xl mb-6">
-                <h4 className="font-bold text-sm text-slate-800 mb-2">Overall Submission Remarks &amp; Feedback:</h4>
+                <h4 className="font-bold text-sm text-slate-800 mb-2">Overall Submission Remarks & Feedback:</h4>
                 <p className="text-xs text-muted mb-2">
                   This overall evaluation remark will be visible to the participant alongside their score breakdown once results are published.
                 </p>
@@ -737,7 +737,7 @@ export default function SubmissionChecker({ submission, activity, user, onClose,
                   onClick={() => setShowPublishModal(true)}
                   disabled={saving || !evaluationResult.isComplete}
                 >
-                  {isPublished ? 'Update Published Result' : 'Publish Result'} &rarr;
+                  {isPublished ? 'Update Published Result' : 'Publish Result'} →
                 </button>
               </div>
             </div>
@@ -783,8 +783,8 @@ export default function SubmissionChecker({ submission, activity, user, onClose,
 
         {/* Confirmation Modal Before Result Publication (Phase 7) */}
         {showPublishModal && (
-          <div className="modal-backdrop" onClick={() => setShowPublishModal(false)}>
-            <div className="modal-card small-modal fade-in" onClick={(e) => e.stopPropagation()}>
+          <div className="modal-backdrop publish-confirm-backdrop" onClick={() => setShowPublishModal(false)}>
+            <div className="modal-card small-modal publish-confirm-card fade-in" onClick={(e) => e.stopPropagation()}>
               <div className="modal-header-bar flex-between">
                 <h3 className="modal-title-text">Confirm Result Publication</h3>
                 <button className="modal-close-btn" onClick={() => setShowPublishModal(false)}>&times;</button>

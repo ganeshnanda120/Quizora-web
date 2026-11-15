@@ -228,7 +228,9 @@ export const saveActivityDraft = async (activityId, activityData) => {
         });
         const docRef = doc(db, 'activities', activityId);
         await setDoc(docRef, slimmedPayload, { merge: true });
-        console.log(`[Task Grade] Activity draft persisted with slimmed payload: ${activityId}`);
+        if (import.meta.env.DEV) {
+          console.log(`[Task Grade] Activity draft persisted with slimmed payload: ${activityId}`);
+        }
       } catch (retryErr) {
         console.warn("Firestore draft retry write notice:", retryErr.message);
       }
@@ -284,7 +286,9 @@ export const publishActivity = async (activityId, fullPayload) => {
         });
         const docRef = doc(db, 'activities', activityId);
         await setDoc(docRef, slimmedPayload, { merge: true });
-        console.log(`[Task Grade] Activity successfully published with slimmed payload to Firestore: ${activityId}`);
+        if (import.meta.env.DEV) {
+          console.log(`[Task Grade] Activity successfully published with slimmed payload to Firestore: ${activityId}`);
+        }
       } catch (retryErr) {
         console.error("Firestore publish retry failed:", retryErr.message);
         throw new Error("Activity contains documents that are too large for Firestore. Please upload smaller PDFs/images under 1MB.", { cause: retryErr });
@@ -368,7 +372,9 @@ export const updateExistingActivity = async (activityId, updatedData, user, prof
         });
         const docRef = doc(db, 'activities', activityId);
         await setDoc(docRef, slimmedPayload, { merge: true });
-        console.log(`[Task Grade] Activity updated with slimmed payload: ${activityId}`);
+        if (import.meta.env.DEV) {
+          console.log(`[Task Grade] Activity updated with slimmed payload: ${activityId}`);
+        }
       } catch (retryErr) {
         console.error("Firestore update retry failed:", retryErr.message);
         throw new Error("Activity contains documents that are too large for Firestore. Please upload smaller PDFs/images under 1MB.", { cause: retryErr });

@@ -19,17 +19,18 @@ export default function StudentActivityScreen({
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
 
-  // Password verification state
-  const isSessionVerified = useMemo(() => {
+  // Password verification state (strictly required each time participant joins or restarts)
+  const [verifiedActivityId, setVerifiedActivityId] = useState(null);
+  const isPasswordVerified = verifiedActivityId === activityId;
+
+  // Clear any legacy session storage key on mount so password is asked on every join/restart
+  useEffect(() => {
     try {
-      return sessionStorage.getItem(`taskgrade_pwd_verified_${activityId}`) === 'true';
+      sessionStorage.removeItem(`taskgrade_pwd_verified_${activityId}`);
     } catch {
-      return false;
+      // Ignore
     }
   }, [activityId]);
-
-  const [verifiedActivityId, setVerifiedActivityId] = useState(null);
-  const isPasswordVerified = (verifiedActivityId === activityId) || isSessionVerified;
 
   const [passwordInput, setPasswordInput] = useState('');
   const [passwordError, setPasswordError] = useState('');
@@ -285,11 +286,27 @@ export default function StudentActivityScreen({
 
     const participantConfig = activity?.participantForm || [];
 
-    if (screenFlow === 'landing' && participantConfig.length > 0) {
-      setScreenFlow('participant_form');
+    // 1. If triggered from Landing screen:
+    if (screenFlow === 'landing') {
+      // If multi-section activity and section has not been selected yet,
+      // ask for section selection immediately after Start Activity (before participant form)!
+      if (hasMultipleSections && !selectedSectionId) {
+        setScreenFlow('section_select');
+        return;
+      }
+
+      // If participant form is configured, proceed to participant form next
+      if (participantConfig.length > 0) {
+        setScreenFlow('participant_form');
+        return;
+      }
+
+      // Otherwise, start attending questions directly
+      setScreenFlow('attending');
       return;
     }
 
+    // 2. If triggered from Participant Form:
     if (screenFlow === 'participant_form') {
       // Validate required fields
       const errors = {};
@@ -306,15 +323,13 @@ export default function StudentActivityScreen({
         setFormErrors(errors);
         return;
       }
-    }
 
-    // Check if this is a Session/Group activity where a section must be selected
-    if (hasMultipleSections && !selectedSectionId) {
-      setScreenFlow('section_select');
+      // All participant details are valid -> enter questions attendance directly
+      setScreenFlow('attending');
       return;
     }
 
-    // All valid -> Enter active questions attendance screen
+    // Fallback
     setScreenFlow('attending');
   };
 
@@ -341,7 +356,13 @@ export default function StudentActivityScreen({
       // ignore
     }
 
-    setScreenFlow('attending');
+    // After section is selected, proceed to participant form (if configured) or straight to questions
+    const participantConfig = activity?.participantForm || [];
+    if (participantConfig.length > 0) {
+      setScreenFlow('participant_form');
+    } else {
+      setScreenFlow('attending');
+    }
   };
 
   // Handle final submission from StudentAttendancePaper
@@ -401,11 +422,6 @@ export default function StudentActivityScreen({
     if (entered === configured) {
       if (import.meta.env.DEV) {
         console.log(`[Task Grade Participant] Password verification result. Activity ID: ${activityId}, Status: SUCCEEDED`);
-      }
-      try {
-        sessionStorage.setItem(`taskgrade_pwd_verified_${activityId}`, 'true');
-      } catch {
-        // Ignore quota error
       }
       setVerifiedActivityId(activityId);
       setVerifyingPassword(false);
@@ -468,7 +484,7 @@ export default function StudentActivityScreen({
             <h2 className="access-brand-title">Task Grade</h2>
           </div>
 
-          <div className="access-status-card bg-white p-8 rounded-2xl shadow-lg border border-slate-100 text-center">
+          <div className="access-status-card text-center">
             <div className="not-found-icon-box mx-auto mb-4">
               <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-danger">
                 <circle cx="12" cy="12" r="10" />
@@ -508,7 +524,7 @@ export default function StudentActivityScreen({
             <h2 className="access-brand-title">Task Grade</h2>
           </div>
 
-          <div className="access-status-card bg-white p-8 rounded-2xl shadow-lg border border-slate-100 text-center">
+          <div className="access-status-card text-center">
             {/* Password Protected Badge */}
             <div className="status-badge-header mb-4">
               <span className="status-badge-pill-password">
@@ -789,7 +805,7 @@ export default function StudentActivityScreen({
                         className="btn btn-primary btn-sm flex-align-center gap-1.5 px-4 py-2"
                         onClick={() => handleSelectSectionAndStart(sec)}
                       >
-                        <span>Select &amp; Attend</span>
+                        <span>Select &amp; Continue</span>
                         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
                           <line x1="5" y1="12" x2="19" y2="12" />
                           <polyline points="12 5 19 12 12 19" />
@@ -805,14 +821,10 @@ export default function StudentActivityScreen({
               type="button"
               className="btn btn-secondary btn-sm w-full"
               onClick={() => {
-                if (activity?.participantForm?.length > 0) {
-                  setScreenFlow('participant_form');
-                } else {
-                  setScreenFlow('landing');
-                }
+                setScreenFlow('landing');
               }}
             >
-              &larr; Back
+              &larr; Back to Activity Info
             </button>
           </div>
         </div>
@@ -838,6 +850,21 @@ export default function StudentActivityScreen({
                 Participant Details
               </span>
               <h3 className="participant-form-title">{activity.title}</h3>
+              {hasMultipleSections && selectedSectionName && (
+                <div className="selected-group-badge-box mb-3 p-2.5 bg-indigo-50 border border-indigo-200 rounded-lg flex-between align-center">
+                  <span className="text-xs text-indigo-950 font-semibold">
+                    Assigned Section / Group: <strong className="text-primary font-bold">{selectedSectionName}</strong>
+                  </span>
+                  <button
+                    type="button"
+                    className="btn btn-link text-xs font-bold text-primary p-0 border-0"
+                    onClick={() => setScreenFlow('section_select')}
+                    style={{ background: 'none', cursor: 'pointer', textDecoration: 'underline' }}
+                  >
+                    Change
+                  </button>
+                </div>
+              )}
               <p className="access-status-message">
                 Please enter your identification details below to proceed to your {activity.purpose || 'activity'}.
               </p>
@@ -889,9 +916,15 @@ export default function StudentActivityScreen({
                 <button
                   type="button"
                   className="btn btn-secondary btn-sm"
-                  onClick={() => setScreenFlow('landing')}
+                  onClick={() => {
+                    if (hasMultipleSections) {
+                      setScreenFlow('section_select');
+                    } else {
+                      setScreenFlow('landing');
+                    }
+                  }}
                 >
-                  &larr; Back to Activity Info
+                  &larr; Back
                 </button>
               </div>
             </form>

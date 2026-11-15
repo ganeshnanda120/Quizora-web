@@ -130,34 +130,44 @@ export default function SubmissionsList({ user, onBack, filterActivityId }) {
   return (
     <div className="submissions-list-container evaluation-dashboard-container fade-in">
       {/* View Header with Activity Context */}
-      <div className="view-header flex-between align-start mb-4">
-        <div>
-          <button type="button" className="btn btn-ghost btn-sm mb-2" onClick={onBack}>
-            &larr; Back to Admin Home
-          </button>
-          <div className="flex-align-center gap-2 mb-1">
+      <div className="submissions-top-toolbar mb-4">
+        {filterActivityId ? (
+          <div className="toolbar-left">
             <span className="badge badge-primary">{currentActivity?.purpose || 'Exam'} Submissions</span>
             {currentActivity?.subject && (
               <span className="badge badge-secondary">{currentActivity.subject}</span>
             )}
-            <span className="text-xs text-muted">ID: <code>{filterActivityId || 'All'}</code></span>
+            <span className="text-xs text-muted">Activity ID: <code>{filterActivityId}</code></span>
           </div>
-          <h2 className="view-title m-0">
-            {currentActivity?.title || 'Participant Submissions Review'}
-          </h2>
-          <p className="view-subtitle mt-1">
-            Review participant answers, evaluate responses, award marks, and publish official results.
-          </p>
-        </div>
+        ) : (
+          <div className="toolbar-left">
+            <button type="button" className="btn btn-ghost btn-sm mb-2" onClick={onBack}>
+              ← Back to Admin Home
+            </button>
+            <div className="flex-align-center gap-2 mb-1">
+              <span className="badge badge-primary">{currentActivity?.purpose || 'Exam'} Submissions</span>
+              {currentActivity?.subject && (
+                <span className="badge badge-secondary">{currentActivity.subject}</span>
+              )}
+              <span className="text-xs text-muted">ID: <code>{filterActivityId || 'All'}</code></span>
+            </div>
+            <h2 className="view-title m-0">
+              {currentActivity?.title || 'Participant Submissions Review'}
+            </h2>
+            <p className="view-subtitle mt-1">
+              Review participant answers, evaluate responses, award marks, and publish official results.
+            </p>
+          </div>
+        )}
 
         <button
           type="button"
-          className="btn btn-secondary btn-sm"
+          className="btn-refresh-pill"
           onClick={loadSubmissionsData}
           disabled={loading}
           title="Refresh submissions list"
         >
-          {loading ? 'Refreshing...' : '🔄 Refresh List'}
+          <span>{loading ? 'Refreshing...' : '🔄 Refresh'}</span>
         </button>
       </div>
 
@@ -403,10 +413,10 @@ export default function SubmissionsList({ user, onBack, filterActivityId }) {
                     }}
                   >
                     {evalStatus === 'completed'
-                      ? 'Review Evaluation &amp; Results &rarr;'
+                      ? 'Review Evaluation & Results →'
                       : evalStatus === 'partially_checked'
-                      ? 'Resume Checking &rarr;'
-                      : 'Check Answers &amp; Grade &rarr;'}
+                      ? 'Resume Checking →'
+                      : 'Check Answers & Grade →'}
                   </button>
                 </div>
               </div>
